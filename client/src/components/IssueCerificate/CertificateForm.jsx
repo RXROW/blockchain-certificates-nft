@@ -1,4 +1,3 @@
- 
 import React, { useState, useEffect } from 'react';
 import { ethers } from 'ethers';
 import toast from 'react-hot-toast';
@@ -338,11 +337,16 @@ function CertificateForm() {
       signer
     );
 
+    // Create the IPFS URI with ipfs:// prefix
+    const tokenURI = `ipfs://${metadataCID}`;
+    console.log('Setting token URI:', tokenURI);
+
+    // Issue the certificate with the IPFS URI as certificateHash
     const tx = await contract.issueCertificate(
       formData.studentAddress,
       formData.courseId,
       formData.grade,
-      `ipfs://${metadataCID}`
+      tokenURI  // This will be stored as both certificateHash and tokenURI
     );
     await tx.wait();
   };

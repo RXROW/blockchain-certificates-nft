@@ -1,7 +1,7 @@
 {
-  "CertificateNFT": "0xd70F69dA66E79F56bE1dE0c13aFE3a8b8Af7DE74",
+  "CertificateNFT": "0x952dd3e14EF6CB7294977E196a665ad19B1507D3",
   "sepolia": {
-    "CertificateNFT": "0xd70F69dA66E79F56bE1dE0c13aFE3a8b8Af7DE74"
+    "CertificateNFT": "0x952dd3e14EF6CB7294977E196a665ad19B1507D3"
   },
   "defaultNetwork": "sepolia"
 }
