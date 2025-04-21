@@ -54,11 +54,21 @@ module.exports = {
       animation: {
         'spin-slow': 'spin 20s linear infinite',
         'spin-slow-reverse': 'spin-reverse 20s linear infinite',
+        'scanline': 'scanline 4s ease-in-out infinite',
+        'shine': 'shine 2s ease-in-out infinite',
       },
       keyframes: {
         'spin-reverse': {
           '0%': { transform: 'rotate(0deg)' },
           '100%': { transform: 'rotate(-360deg)' },
+        },
+        'scanline': {
+          '0%': { transform: 'translateX(-100%)' },
+          '100%': { transform: 'translateX(100%)' },
+        },
+        'shine': {
+          '0%': { transform: 'translateX(-100%)' },
+          '100%': { transform: 'translateX(100%)' },
         },
       },
     },
