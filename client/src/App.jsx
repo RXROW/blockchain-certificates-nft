@@ -15,6 +15,7 @@ import Footer from './components/Shared/Footer';
 import { Toaster } from 'react-hot-toast';
 import "slick-carousel/slick/slick.css";
 import "slick-carousel/slick/slick-theme.css";
+import Loading from './components/Shared/LoadingSpinner';
 
 function App() {
   const [isLoading, setIsLoading] = useState(true);
@@ -79,7 +80,7 @@ function App() {
   if (isLoading) {
     return (
       <div className="app-loading flex items-center justify-center h-screen bg-gray-100">
-        <LoadingSpinner size="large" text="Initializing application..." />
+        <Loading variant="cube" />
       </div>
     );
   }
