@@ -107,7 +107,7 @@ function App() {
               }
             >
               {/* Dashboard default route */}
-              <Route index element={<Navigate to="certificates" replace />} />
+              <Route index element={<Navigate to="in" replace />} />
 
               {/* Available to all users */}
               <Route path="certificates" element={<CertificatesList />} />

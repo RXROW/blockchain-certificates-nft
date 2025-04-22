@@ -1,9 +1,9 @@
 import React from 'react';
 import styled from 'styled-components';
 
- 
 
-const Loading  = ({
+
+const Loading = ({
   variant = 'spinner',
   size = 'medium',
   text = 'Loading...'

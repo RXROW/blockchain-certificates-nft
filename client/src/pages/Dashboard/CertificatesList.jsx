@@ -2,10 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { BrowserProvider, Contract } from 'ethers';
 import contractAddress from '../../config/contractAddress.json';
 import contractABI from '../../config/abi.json';
-import { FaEye, FaFileAlt, FaSpinner, FaCheck, FaBan, FaExchangeAlt, FaUsers } from 'react-icons/fa';
+import { FaEye, FaFileAlt, FaCheck, FaBan, FaSearch, FaFilter, FaThLarge, FaList, FaTimes, FaSync } from 'react-icons/fa';
 import PINATA_CONFIG from '../../config/pinata';
-
-const placeholderImage = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAwIiBoZWlnaHQ9IjQwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iNjAwIiBoZWlnaHQ9IjQwMCIgZmlsbD0iIzJkM2Q0MCIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBmb250LWZhbWlseT0iQXJpYWwiIGZvbnQtc2l6ZT0iMjQiIGZpbGw9IiM2YzcyN2QiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGR5PSIuM2VtIj5JbWFnZSBOb3QgQXZhaWxhYmxlPC90ZXh0Pjwvc3ZnPg==';
+import {
+  formatGrade, getStatusColor, getStatusText
+  , placeholderImage, getStatusBorderColor
+} from '../../components/HelpersFunctions/Utility';
+import Loading from '../../components/Shared/LoadingSpinner';
+import toast from 'react-hot-toast';
 
 const CertificatesList = () => {
   const [certificates, setCertificates] = useState([]);
@@ -20,14 +24,45 @@ const CertificatesList = () => {
   const [account, setAccount] = useState(null);
   const [isConnecting, setIsConnecting] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
-  const [actionLoading, setActionLoading] = useState(false);
   const [showRevokeModal, setShowRevokeModal] = useState(false);
   const [revocationReason, setRevocationReason] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [viewMode, setViewMode] = useState('grid');
-  const [viewAllCertificates, setViewAllCertificates] = useState(false);
   const [allCertificatesLoading, setAllCertificatesLoading] = useState(false);
+  const [hasMoreCertificates, setHasMoreCertificates] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [verifyingId, setVerifyingId] = useState(null);
+  const [revokingId, setRevokingId] = useState(null);
+  const [paginatedCertificates, setPaginatedCertificates] = useState([]);
+  const certificatesPerPage = 9;
+
+  // Determine which certificates to display based on admin status
+  const certificatesToDisplay = isAdmin ? allCertificates : certificates;
+
+  // Memoize the filtered certificates to prevent recalculation on every render
+  const filteredCertificates = React.useMemo(() => {
+    return certificatesToDisplay.filter(cert => {
+      const matchesSearch = cert.courseName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        cert.id.includes(searchTerm) ||
+        cert.institution.toLowerCase().includes(searchTerm.toLowerCase());
+
+      if (statusFilter === 'all') return matchesSearch;
+      if (statusFilter === 'verified') return matchesSearch && cert.isVerified && !cert.isRevoked;
+      if (statusFilter === 'pending') return matchesSearch && !cert.isVerified && !cert.isRevoked;
+      if (statusFilter === 'revoked') return matchesSearch && cert.isRevoked;
+
+      return matchesSearch;
+    });
+  }, [certificatesToDisplay, searchTerm, statusFilter]);
+
+  // Update paginated certificates when filtered results or page changes
+  useEffect(() => {
+    const paginatedResults = filteredCertificates.slice(0, currentPage * certificatesPerPage);
+    setPaginatedCertificates(paginatedResults);
+    setHasMoreCertificates(filteredCertificates.length > currentPage * certificatesPerPage);
+  }, [filteredCertificates, currentPage, certificatesPerPage]);
 
   // Function to check if MetaMask is installed
   const checkMetaMask = () => {
@@ -325,7 +360,8 @@ const CertificatesList = () => {
   // Verify certificate function for admin
   const verifyCertificate = async (certificate) => {
     try {
-      setActionLoading(true);
+      setVerifyingId(certificate.id);
+      const toastId = toast.loading('Verifying certificate...');
 
       const provider = new BrowserProvider(window.ethereum);
       const signer = await provider.getSigner();
@@ -337,11 +373,12 @@ const CertificatesList = () => {
       await tx.wait();
       console.log(`Certificate ${certificate.id} verified successfully`);
 
-      // Update the certificate in state
-      const updatedCertificates = certificates.map(cert =>
-        cert.id === certificate.id ? { ...cert, isVerified: true } : cert
-      );
-      setCertificates(updatedCertificates);
+      // Update both certificates arrays
+      const updateCertificate = cert =>
+        cert.id === certificate.id ? { ...cert, isVerified: true } : cert;
+
+      setCertificates(prevCerts => prevCerts.map(updateCertificate));
+      setAllCertificates(prevAllCerts => prevAllCerts.map(updateCertificate));
 
       // Also update the selected certificate if it's the one being verified
       if (selectedCertificate && selectedCertificate.id === certificate.id) {
@@ -349,19 +386,20 @@ const CertificatesList = () => {
       }
 
       // Show success notification
-      alert(`Certificate ${certificate.id} verified successfully`);
+      toast.success(`Certificate ${certificate.id} verified successfully`, { id: toastId });
     } catch (error) {
       console.error('Error verifying certificate:', error);
-      alert(`Failed to verify certificate: ${error.message}`);
+      toast.error(`Failed to verify certificate: ${error.message}`);
     } finally {
-      setActionLoading(false);
+      setVerifyingId(null);
     }
   };
 
   // Revoke certificate function for admin
   const revokeCertificate = async (certificate, reason) => {
     try {
-      setActionLoading(true);
+      setRevokingId(certificate.id);
+      const toastId = toast.loading('Revoking certificate...');
 
       const provider = new BrowserProvider(window.ethereum);
       const signer = await provider.getSigner();
@@ -373,11 +411,12 @@ const CertificatesList = () => {
       await tx.wait();
       console.log(`Certificate ${certificate.id} revoked successfully`);
 
-      // Update the certificate in state
-      const updatedCertificates = certificates.map(cert =>
-        cert.id === certificate.id ? { ...cert, isRevoked: true, revocationReason: reason } : cert
-      );
-      setCertificates(updatedCertificates);
+      // Update both certificates arrays
+      const updateCertificate = cert =>
+        cert.id === certificate.id ? { ...cert, isRevoked: true, revocationReason: reason } : cert;
+
+      setCertificates(prevCerts => prevCerts.map(updateCertificate));
+      setAllCertificates(prevAllCerts => prevAllCerts.map(updateCertificate));
 
       // Also update the selected certificate if it's the one being revoked
       if (selectedCertificate && selectedCertificate.id === certificate.id) {
@@ -389,12 +428,12 @@ const CertificatesList = () => {
       setRevocationReason('');
 
       // Show success notification
-      alert(`Certificate ${certificate.id} revoked successfully`);
+      toast.success(`Certificate ${certificate.id} revoked successfully`, { id: toastId });
     } catch (error) {
       console.error('Error revoking certificate:', error);
-      alert(`Failed to revoke certificate: ${error.message}`);
+      toast.error(`Failed to revoke certificate: ${error.message}`);
     } finally {
-      setActionLoading(false);
+      setRevokingId(null);
     }
   };
 
@@ -428,6 +467,7 @@ const CertificatesList = () => {
 
       console.log('All certificates fetched:', allCerts.length);
       setAllCertificates(allCerts);
+      setHasMoreCertificates(allCerts.length > certificatesPerPage);
     } catch (err) {
       console.error('Error fetching all certificates:', err);
     } finally {
@@ -435,40 +475,39 @@ const CertificatesList = () => {
     }
   };
 
-  // Handle view change (my certificates vs all certificates)
-  const handleViewChange = async () => {
-    const newValue = !viewAllCertificates;
-    setViewAllCertificates(newValue);
+  // Load more certificates
+  const loadMoreCertificates = async () => {
+    if (isLoadingMore) return;
 
-    // If switching to all certificates and they're not loaded yet
-    if (newValue && isAdmin && allCertificates.length === 0) {
-      await fetchAllCertificates(contract);
+    setIsLoadingMore(true);
+
+    try {
+      // Simulate loading delay
+      await new Promise(resolve => setTimeout(resolve, 800));
+
+      // Increment the current page
+      setCurrentPage(prevPage => prevPage + 1);
+
+      // Check if we've reached the end
+      const totalCertificates = isAdmin ? allCertificates.length : certificates.length;
+      const nextPageStart = currentPage * certificatesPerPage;
+
+      if (nextPageStart >= totalCertificates) {
+        setHasMoreCertificates(false);
+      }
+    } catch (error) {
+      console.error('Error loading more certificates:', error);
+    } finally {
+      setIsLoadingMore(false);
     }
   };
 
-  // Effect to fetch all certificates when switching to all certificates view
+  // Effect to fetch all certificates when component mounts if user is admin
   useEffect(() => {
-    if (isAdmin && viewAllCertificates && allCertificates.length === 0 && contract) {
+    if (isAdmin && contract && allCertificates.length === 0) {
       fetchAllCertificates(contract);
     }
-  }, [viewAllCertificates, isAdmin, contract]);
-
-  // Determine which certificates to display based on admin view toggle
-  const certificatesToDisplay = viewAllCertificates && isAdmin ? allCertificates : certificates;
-
-  // Filter certificates based on search term and status
-  const filteredCertificates = certificatesToDisplay.filter(cert => {
-    const matchesSearch = cert.courseName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      cert.id.includes(searchTerm) ||
-      cert.institution.toLowerCase().includes(searchTerm.toLowerCase());
-
-    if (statusFilter === 'all') return matchesSearch;
-    if (statusFilter === 'verified') return matchesSearch && cert.isVerified && !cert.isRevoked;
-    if (statusFilter === 'pending') return matchesSearch && !cert.isVerified && !cert.isRevoked;
-    if (statusFilter === 'revoked') return matchesSearch && cert.isRevoked;
-
-    return matchesSearch;
-  });
+  }, [isAdmin, contract]);
 
   useEffect(() => {
     let mounted = true;
@@ -549,26 +588,6 @@ const CertificatesList = () => {
     }
   }, []);
 
-  const formatGrade = (grade) => {
-    if (grade >= 90) return 'A';
-    if (grade >= 80) return 'B';
-    if (grade >= 70) return 'C';
-    if (grade >= 60) return 'D';
-    return 'F';
-  };
-
-  const getStatusColor = (certificate) => {
-    if (certificate.isRevoked) return 'bg-red-500 text-white';
-    if (certificate.isVerified) return 'bg-green-500 text-white';
-    return 'bg-yellow-500 text-white';
-  };
-
-  const getStatusText = (certificate) => {
-    if (certificate.isRevoked) return 'Revoked';
-    if (certificate.isVerified) return 'Verified';
-    return 'Pending';
-  };
-
   const handleViewMetadata = (certificate) => {
     setSelectedCertificate(certificate);
     setShowMetadata(true);
@@ -610,129 +629,163 @@ const CertificatesList = () => {
   const handleRevokeSubmit = (e) => {
     e.preventDefault();
     if (!revocationReason.trim()) {
-      alert('Please provide a reason for revocation');
+      toast.error('Please provide a reason for revocation');
       return;
     }
     revokeCertificate(selectedCertificate, revocationReason);
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-950 to-violet-950 text-white pt-16 pb-20">
+    <div className="min-h-screen bg-gradient-to-br from-slate-950  to-violet-950 text-white pt-20 pb-20">
+
+
       <div className="container mx-auto px-4">
-        <div className="flex justify-between items-center mb-8">
-          <h2 className="text-3xl font-bold">
-            {isAdmin && viewAllCertificates ? "All Certificates" : "My Certificates"}
-          </h2>
-          {isAdmin && (
-            <div className="flex space-x-2">
-              <button
-                onClick={handleViewChange}
-                className="flex items-center px-4 py-2 bg-violet-700 hover:bg-violet-800 rounded-lg transition-colors"
-              >
-                <FaExchangeAlt className="mr-2" />
-                {viewAllCertificates ? "View My Certificates" : "View All Certificates"}
-              </button>
-            </div>
-          )}
+        {/* Header Section */}
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
+          <div>
+            <h2 className="text-3xl font-bold bg-gradient-to-r from-violet-200 to-indigo-200 bg-clip-text text-transparent">
+              {isAdmin ? "All Certificates" : "My Certificates"}
+            </h2>
+            <p className="text-slate-400 mt-1">
+              {isAdmin
+                ? "Manage and verify all certificates in the system"
+                : "View and manage your academic certificates"}
+            </p>
+          </div>
         </div>
 
-        {/* Loading state for all certificates */}
-        {allCertificatesLoading && viewAllCertificates && (
-          <div className="flex justify-center items-center py-8">
-            <FaSpinner className="animate-spin text-4xl text-violet-500 mr-4" />
-            <span className="text-xl">Loading all certificates...</span>
+        {allCertificatesLoading && isAdmin && (
+          <div className="fixed inset-0 backdrop-blur-sm z-50 flex justify-center items-center bg-black/70">
+            <Loading size="large" variant="cube" />
+
           </div>
         )}
 
-        <div className="mb-8 flex flex-col md:flex-row gap-4">
-          <div className="flex-1">
-            <input
-              type="text"
-              placeholder="Search by course name, ID, or institution..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full px-4 py-3 bg-gray-800 border border-gray-700 rounded-lg focus:outline-none focus:ring-2   focus:ring-violet-500"
-            />
-          </div>
-          <div className="flex gap-4">
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500"
-            >
-              <option value="all">All Statuses</option>
-              <option value="verified">Verified</option>
-              <option value="pending">Pending</option>
-              <option value="revoked">Revoked</option>
-            </select>
-            <div className="flex rounded-lg overflow-hidden border border-gray-700">
-              <button
-                onClick={() => setViewMode('grid')}
-                className={`px-4 py-2 ${viewMode === 'grid' ? 'bg-violet-600' : 'bg-gray-800'}`}
-              >
-                Grid
-              </button>
-              <button
-                onClick={() => setViewMode('list')}
-                className={`px-4 py-2 ${viewMode === 'list' ? 'bg-violet-600' : 'bg-gray-800'}`}
-              >
-                List
-              </button>
+
+        {/* Search and Filter Section */}
+        <div className="mb-8 bg-slate-800/30 rounded-lg border border-slate-700/50 p-4">
+          <div className="flex flex-col md:flex-row gap-4">
+            <div className="flex-1 relative">
+              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                <FaSearch className="text-slate-400" />
+              </div>
+              <input
+                type="text"
+                placeholder="Search by course name, ID, or institution..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-10 pr-4 py-3 bg-slate-900/50 border border-slate-700/50 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500 text-white placeholder-slate-500"
+              />
+              {searchTerm && (
+                <button
+                  onClick={() => setSearchTerm('')}
+                  className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-white"
+                >
+                  <FaTimes />
+                </button>
+              )}
+            </div>
+
+            <div className="flex flex-col sm:flex-row gap-3">
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <FaFilter className="text-slate-400" />
+                </div>
+                <select
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value)}
+                  className="pl-10 pr-4 py-3 bg-slate-900/50 border border-slate-700/50 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500 text-white appearance-none"
+                >
+                  <option value="all">All Statuses</option>
+                  <option value="verified">Verified</option>
+                  <option value="pending">Pending</option>
+                  <option value="revoked">Revoked</option>
+                </select>
+                <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
+                  <svg className="h-4 w-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </div>
+              </div>
+
+              <div className="flex rounded-lg overflow-hidden border border-slate-700/50">
+                <button
+                  onClick={() => setViewMode('grid')}
+                  className={`px-4 py-3 flex items-center ${viewMode === 'grid' ? 'bg-violet-600/80' : 'bg-slate-900/50 hover:bg-slate-800/50'}`}
+                >
+                  <FaThLarge className="mr-2" />
+                  <span className="hidden sm:inline">Grid</span>
+                </button>
+                <button
+                  onClick={() => setViewMode('list')}
+                  className={`px-4 py-3 flex items-center ${viewMode === 'list' ? 'bg-violet-600/80' : 'bg-slate-900/50 hover:bg-slate-800/50'}`}
+                >
+                  <FaList className="mr-2" />
+                  <span className="hidden sm:inline">List</span>
+                </button>
+              </div>
             </div>
           </div>
         </div>
 
+        {/* Empty State */}
         {filteredCertificates.length === 0 ? (
-          <div className="text-center py-16 bg-gray-800/50 border border-gray-700 rounded-lg">
+          <div className="text-center py-16 bg-slate-800/30 border border-slate-700/50 rounded-lg">
             <div className="max-w-md mx-auto">
-              <FaFileAlt className="mx-auto text-4xl text-gray-500 mb-4" />
-              <h3 className="text-xl font-semibold mb-2">No Certificates Found</h3>
-              <p className="text-gray-400">
+              <div className="w-16 h-16 mx-auto bg-slate-700/50 rounded-full flex items-center justify-center mb-4">
+                <FaFileAlt className="text-3xl text-slate-400" />
+              </div>
+              <h3 className="text-xl font-semibold mb-2 text-slate-200">No Certificates Found</h3>
+              <p className="text-slate-400">
                 {certificatesToDisplay.length === 0
-                  ? "No certificates available."
+                  ? "You don't have any certificates yet."
                   : "No certificates match your search criteria."}
               </p>
             </div>
           </div>
         ) : viewMode === 'grid' ? (
+          /* Grid View */
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filteredCertificates.map((certificate) => (
+            {paginatedCertificates.map((certificate) => (
               <div
                 key={certificate.id}
-                className="bg-gray-800/80 border border-gray-700 rounded-lg overflow-hidden hover:border-violet-500 transition-all duration-300 shadow-lg"
+                className={`bg-slate-800/40 border border-violet-600/5  rounded-lg overflow-hidden ${getStatusBorderColor(certificate)} transition-all duration-300 shadow-lg group`}
+
               >
-                <div className={`h-2 ${getStatusColor(certificate)}`}></div>
+                <div className={`h-1.5 ${getStatusColor(certificate)}`}></div>
                 <div className="p-6">
                   <div className="flex justify-between items-start mb-4">
-                    <h3 className="text-xl font-semibold text-violet-400 truncate">{certificate.courseName}</h3>
-                    <span className={`${getStatusColor(certificate)} px-3 py-1 rounded-full text-sm font-medium`}>
+                    <h3 className="text-xl font-semibold text-violet-300 truncate group-hover:text-violet-200 transition-colors">
+                      {certificate.courseName}
+                    </h3>
+                    <span className={`${getStatusColor(certificate)} px-3 py-1 rounded-full text-xs font-medium`}>
                       {getStatusText(certificate)}
                     </span>
                   </div>
 
                   <div className="space-y-3 mb-6">
-                    <p className="text-sm text-gray-400">Certificate ID: {certificate.id}</p>
+                    <p className="text-sm text-slate-400">Certificate ID: {certificate.id}</p>
                     <p className="flex items-center text-sm">
-                      <span className="text-gray-400 w-32">Student:</span>
-                      <span className="truncate">{certificate.student.substring(0, 10)}...{certificate.student.substring(certificate.student.length - 8)}</span>
+                      <span className="text-slate-400 w-32">Student:</span>
+                      <span className="truncate text-slate-300">{certificate.student.substring(0, 10)}...{certificate.student.substring(certificate.student.length - 8)}</span>
                     </p>
                     <p className="flex items-center text-sm">
-                      <span className="text-gray-400 w-32">Institution:</span>
-                      <span className="truncate">{certificate.institution.substring(0, 10)}...{certificate.institution.substring(certificate.institution.length - 8)}</span>
+                      <span className="text-slate-400 w-32">Institution:</span>
+                      <span className="truncate text-slate-300">{certificate.institution.substring(0, 10)}...{certificate.institution.substring(certificate.institution.length - 8)}</span>
                     </p>
                     <p className="flex items-center text-sm">
-                      <span className="text-gray-400 w-32">Completion:</span>
-                      <span>{certificate.completionDate}</span>
+                      <span className="text-slate-400 w-32">Completion:</span>
+                      <span className="text-slate-300">{certificate.completionDate}</span>
                     </p>
                     <p className="flex items-center text-sm">
-                      <span className="text-gray-400 w-32">Grade:</span>
+                      <span className="text-slate-400 w-32">Grade:</span>
                       <span className={`font-semibold ${certificate.grade >= 70 ? 'text-green-400' : certificate.grade >= 60 ? 'text-yellow-400' : 'text-red-400'}`}>
                         {formatGrade(certificate.grade)} ({certificate.grade}%)
                       </span>
                     </p>
                     {certificate.revocationReason && (
                       <p className="flex items-center text-sm">
-                        <span className="text-gray-400 w-32">Revoked:</span>
+                        <span className="text-slate-400 w-32">Revoked:</span>
                         <span className="text-red-400">{certificate.revocationReason}</span>
                       </p>
                     )}
@@ -741,14 +794,14 @@ const CertificatesList = () => {
                   <div className="flex flex-wrap gap-2">
                     <button
                       onClick={() => handleViewMetadata(certificate)}
-                      className="flex items-center px-3 py-1.5 bg-violet-600 hover:bg-violet-700 rounded-lg transition-colors text-sm"
+                      className="flex items-center px-3 py-1.5 bg-violet-600/80 hover:bg-violet-600 rounded-lg transition-colors text-sm"
                     >
                       <FaFileAlt className="mr-1" />
                       Metadata
                     </button>
                     <button
                       onClick={() => handleViewImage(certificate)}
-                      className="flex items-center px-3 py-1.5 bg-purple-600 hover:bg-purple-700 rounded-lg transition-colors text-sm"
+                      className="flex items-center px-3 py-1.5 bg-indigo-600/80 hover:bg-indigo-600 rounded-lg transition-colors text-sm"
                     >
                       <FaEye className="mr-1" />
                       View
@@ -757,11 +810,11 @@ const CertificatesList = () => {
                     {isAdmin && !certificate.isVerified && !certificate.isRevoked && (
                       <button
                         onClick={() => verifyCertificate(certificate)}
-                        disabled={actionLoading}
-                        className="flex items-center px-3 py-1.5 bg-green-600 hover:bg-green-700 rounded-lg transition-colors text-sm"
+                        disabled={verifyingId === certificate.id}
+                        className="flex items-center px-3 py-1.5 bg-green-600/80 hover:bg-green-600 rounded-lg transition-colors text-sm"
                       >
-                        {actionLoading ? (
-                          <FaSpinner className="animate-spin mr-1" />
+                        {verifyingId === certificate.id ? (
+                          <Loading size="small" />
                         ) : (
                           <FaCheck className="mr-1" />
                         )}
@@ -772,11 +825,11 @@ const CertificatesList = () => {
                     {isAdmin && !certificate.isRevoked && (
                       <button
                         onClick={() => openRevokeModal(certificate)}
-                        disabled={actionLoading}
-                        className="flex items-center px-3 py-1.5 bg-red-600 hover:bg-red-700 rounded-lg transition-colors text-sm"
+                        disabled={revokingId === certificate.id}
+                        className="flex items-center px-3 py-1.5 bg-red-600/80 hover:bg-red-600 rounded-lg transition-colors text-sm"
                       >
-                        {actionLoading ? (
-                          <FaSpinner className="animate-spin mr-1" />
+                        {revokingId === certificate.id ? (
+                          <Loading size="small" />
                         ) : (
                           <FaBan className="mr-1" />
                         )}
@@ -789,28 +842,29 @@ const CertificatesList = () => {
             ))}
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full bg-gray-800/80 border border-gray-700 rounded-lg overflow-hidden">
+          /* List View */
+          <div className="overflow-x-auto rounded-lg border border-slate-700/50">
+            <table className="w-full bg-slate-800/50">
               <thead>
-                <tr className="bg-gray-700">
-                  <th className="px-4 py-3 text-left">ID</th>
-                  <th className="px-4 py-3 text-left">Course</th>
-                  <th className="px-4 py-3 text-left">Student</th>
-                  <th className="px-4 py-3 text-left">Institution</th>
-                  <th className="px-4 py-3 text-left">Completion Date</th>
-                  <th className="px-4 py-3 text-left">Grade</th>
-                  <th className="px-4 py-3 text-left">Status</th>
-                  <th className="px-4 py-3 text-left">Actions</th>
+                <tr className="bg-slate-900/50">
+                  <th className="px-4 py-3 text-left text-slate-400 font-medium">ID</th>
+                  <th className="px-4 py-3 text-left text-slate-400 font-medium">Course</th>
+                  <th className="px-4 py-3 text-left text-slate-400 font-medium">Student</th>
+                  <th className="px-4 py-3 text-left text-slate-400 font-medium">Institution</th>
+                  <th className="px-4 py-3 text-left text-slate-400 font-medium">Completion Date</th>
+                  <th className="px-4 py-3 text-left text-slate-400 font-medium">Grade</th>
+                  <th className="px-4 py-3 text-left text-slate-400 font-medium">Status</th>
+                  <th className="px-4 py-3 text-left text-slate-400 font-medium">Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {filteredCertificates.map((certificate) => (
-                  <tr key={certificate.id} className="border-t border-gray-700 hover:bg-gray-700/50">
-                    <td className="px-4 py-3">{certificate.id}</td>
-                    <td className="px-4 py-3 max-w-xs truncate">{certificate.courseName}</td>
-                    <td className="px-4 py-3">{certificate.student.substring(0, 6)}...{certificate.student.substring(certificate.student.length - 4)}</td>
-                    <td className="px-4 py-3">{certificate.institution.substring(0, 6)}...{certificate.institution.substring(certificate.institution.length - 4)}</td>
-                    <td className="px-4 py-3">{certificate.completionDate}</td>
+                {paginatedCertificates.map((certificate) => (
+                  <tr key={certificate.id} className="border-t border-slate-700/50 hover:bg-slate-700/30 transition-colors">
+                    <td className="px-4 py-3 text-slate-300">{certificate.id}</td>
+                    <td className="px-4 py-3 max-w-xs truncate text-slate-300">{certificate.courseName}</td>
+                    <td className="px-4 py-3 text-slate-300">{certificate.student.substring(0, 6)}...{certificate.student.substring(certificate.student.length - 4)}</td>
+                    <td className="px-4 py-3 text-slate-300">{certificate.institution.substring(0, 6)}...{certificate.institution.substring(certificate.institution.length - 4)}</td>
+                    <td className="px-4 py-3 text-slate-300">{certificate.completionDate}</td>
                     <td className="px-4 py-3">
                       <span className={`font-semibold ${certificate.grade >= 70 ? 'text-green-400' : certificate.grade >= 60 ? 'text-yellow-400' : 'text-red-400'}`}>
                         {formatGrade(certificate.grade)} ({certificate.grade}%)
@@ -825,14 +879,14 @@ const CertificatesList = () => {
                       <div className="flex space-x-2">
                         <button
                           onClick={() => handleViewMetadata(certificate)}
-                          className="p-1 text-violet-400 hover:text-violet-300"
+                          className="p-1.5 text-violet-400 hover:text-violet-300 hover:bg-slate-700/50 rounded-md transition-colors"
                           title="View Metadata"
                         >
                           <FaFileAlt />
                         </button>
                         <button
                           onClick={() => handleViewImage(certificate)}
-                          className="p-1 text-purple-400 hover:text-purple-300"
+                          className="p-1.5 text-indigo-400 hover:text-indigo-300 hover:bg-slate-700/50 rounded-md transition-colors"
                           title="View Certificate"
                         >
                           <FaEye />
@@ -841,22 +895,30 @@ const CertificatesList = () => {
                         {isAdmin && !certificate.isVerified && !certificate.isRevoked && (
                           <button
                             onClick={() => verifyCertificate(certificate)}
-                            disabled={actionLoading}
-                            className="p-1 text-green-400 hover:text-green-300"
+                            disabled={verifyingId === certificate.id}
+                            className="p-1.5 text-green-400 hover:text-green-300 hover:bg-slate-700/50 rounded-md transition-colors"
                             title="Verify Certificate"
                           >
-                            <FaCheck />
+                            {verifyingId === certificate.id ? (
+                              <Loading size="small" />
+                            ) : (
+                              <FaCheck />
+                            )}
                           </button>
                         )}
 
                         {isAdmin && !certificate.isRevoked && (
                           <button
                             onClick={() => openRevokeModal(certificate)}
-                            disabled={actionLoading}
-                            className="p-1 text-red-400 hover:text-red-300"
+                            disabled={revokingId === certificate.id}
+                            className="p-1.5 text-red-400 hover:text-red-300 hover:bg-slate-700/50 rounded-md transition-colors"
                             title="Revoke Certificate"
                           >
-                            <FaBan />
+                            {revokingId === certificate.id ? (
+                              <Loading size="small" />
+                            ) : (
+                              <FaBan />
+                            )}
                           </button>
                         )}
                       </div>
@@ -867,69 +929,89 @@ const CertificatesList = () => {
             </table>
           </div>
         )}
+
+        {/* Load More Button */}
+        {hasMoreCertificates && paginatedCertificates.length < filteredCertificates.length && (
+          <div className="mt-8 flex justify-center">
+            <button
+              onClick={loadMoreCertificates}
+              disabled={isLoadingMore}
+              className="flex items-center px-6 py-3 bg-slate-800/50 hover:bg-slate-700/50 rounded-lg transition-all duration-200 border border-slate-700/50 hover:border-slate-600/50"
+            >
+              {isLoadingMore ? (
+                <Loading size="small" />
+              ) : (
+                <FaSync className="mr-2" />
+              )}
+              {isLoadingMore ? "Loading..." : "Load More Certificates"}
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Metadata Modal */}
       {showMetadata && selectedCertificate && (
-        <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center p-4 z-50">
-          <div className="bg-gray-800 rounded-lg p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto border border-gray-700 shadow-xl">
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-slate-900 rounded-lg p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto border border-slate-700 shadow-xl">
             <div className="flex justify-between items-center mb-4">
-              <h3 className="text-2xl font-bold text-violet-400">Certificate Metadata</h3>
+              <h3 className="text-2xl font-bold text-violet-300">Certificate Metadata</h3>
               <button
                 onClick={closeModal}
-                className="text-gray-400 hover:text-white text-xl"
+                className="text-slate-400 hover:text-white text-2xl  hover:bg-red-500/30 h-10 w-10 rounded-full transition-colors"
               >
                 &times;
               </button>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-              <div className="bg-gray-700/50 p-4 rounded-lg">
-                <h4 className="font-semibold text-violet-300 mb-2">Certificate Details</h4>
+              <div className="bg-slate-800/50 p-4 rounded-lg border border-slate-700/50">
+                <h4 className="font-semibold text-violet-300 mb-3">Certificate Details</h4>
                 <div className="space-y-2">
-                  <p><span className="text-gray-400">Token ID:</span> {selectedCertificate.id}</p>
-                  <p><span className="text-gray-400">Course Name:</span> {selectedCertificate.courseName}</p>
-                  <p><span className="text-gray-400">Course ID:</span> {selectedCertificate.courseId}</p>
-                  <p><span className="text-gray-400">Completion Date:</span> {selectedCertificate.completionDate}</p>
-                  <p><span className="text-gray-400">Grade:</span> {formatGrade(selectedCertificate.grade)} ({selectedCertificate.grade}%)</p>
-                  <p><span className="text-gray-400">Status:</span> {selectedCertificate.isRevoked ? 'Revoked' : selectedCertificate.isVerified ? 'Verified' : 'Pending'}</p>
+                  <p className="flex justify-between"><span className="text-slate-400">Token ID:</span> <span className="text-slate-200">{selectedCertificate.id}</span></p>
+                  <p className="flex justify-between"><span className="text-slate-400">Course Name:</span> <span className="text-slate-200">{selectedCertificate.courseName}</span></p>
+                  <p className="flex justify-between"><span className="text-slate-400">Course ID:</span> <span className="text-slate-200">{selectedCertificate.courseId}</span></p>
+                  <p className="flex justify-between"><span className="text-slate-400">Completion Date:</span> <span className="text-slate-200">{selectedCertificate.completionDate}</span></p>
+                  <p className="flex justify-between"><span className="text-slate-400">Grade:</span> <span className={`font-semibold ${selectedCertificate.grade >= 70 ? 'text-green-400' : selectedCertificate.grade >= 60 ? 'text-yellow-400' : 'text-red-400'}`}>{formatGrade(selectedCertificate.grade)} ({selectedCertificate.grade}%)</span></p>
+                  <p className="flex justify-between"><span className="text-slate-400">Status:</span> <span className={`${selectedCertificate.isRevoked ? 'text-red-400' : selectedCertificate.isVerified ? 'text-green-400' : 'text-yellow-400'}`}>{selectedCertificate.isRevoked ? 'Revoked' : selectedCertificate.isVerified ? 'Verified' : 'Pending'}</span></p>
                 </div>
               </div>
 
-              <div className="bg-gray-700/50 p-4 rounded-lg">
-                <h4 className="font-semibold text-violet-300 mb-2">Blockchain Data</h4>
+              <div className="bg-slate-800/50 p-4 rounded-lg border border-slate-700/50">
+                <h4 className="font-semibold text-violet-300 mb-3">Blockchain Data</h4>
                 <div className="space-y-2">
-                  <p><span className="text-gray-400">Student:</span> <span className="break-all text-xs">{selectedCertificate.student}</span></p>
-                  <p><span className="text-gray-400">Institution:</span> <span className="break-all text-xs">{selectedCertificate.institution}</span></p>
+                  <p className="flex flex-col"><span className="text-slate-400">Student:</span> <span className="break-all text-xs text-slate-300 mt-1">{selectedCertificate.student}</span></p>
+                  <p className="flex flex-col"><span className="text-slate-400">Institution:</span> <span className="break-all text-xs text-slate-300 mt-1">{selectedCertificate.institution}</span></p>
                   {selectedCertificate.revocationReason && (
-                    <p><span className="text-gray-400">Revocation:</span> <span className="text-red-400">{selectedCertificate.revocationReason}</span></p>
+                    <p className="flex flex-col"><span className="text-slate-400">Revocation:</span> <span className="text-red-400 mt-1">{selectedCertificate.revocationReason}</span></p>
                   )}
                 </div>
               </div>
             </div>
 
             {selectedCertificate.imageCID && (
-              <div className="bg-gray-700/50 p-4 rounded-lg mb-4">
-                <h4 className="font-semibold text-violet-300 mb-2">IPFS Data</h4>
-                <p><span className="text-gray-400">Image CID:</span> <span className="break-all text-xs">{selectedCertificate.imageCID}</span></p>
-                <p><span className="text-gray-400">Metadata CID:</span> <span className="break-all text-xs">{selectedCertificate.metadataCID}</span></p>
+              <div className="bg-slate-800/50 p-4 rounded-lg border border-slate-700/50 mb-4">
+                <h4 className="font-semibold text-violet-300 mb-3">IPFS Data</h4>
+                <div className="space-y-2">
+                  <p className="flex flex-col"><span className="text-slate-400">Image CID:</span> <span className="break-all text-xs text-slate-300 mt-1">{selectedCertificate.imageCID}</span></p>
+                  <p className="flex flex-col"><span className="text-slate-400">Metadata CID:</span> <span className="break-all text-xs text-slate-300 mt-1">{selectedCertificate.metadataCID}</span></p>
+                </div>
               </div>
             )}
 
             {selectedCertificate.metadata && (
-              <div className="bg-gray-700/50 p-4 rounded-lg">
-                <h4 className="font-semibold text-violet-300 mb-2">Metadata Content</h4>
-                <div className="space-y-2">
-                  <p><span className="text-gray-400">Name:</span> {selectedCertificate.metadata.name}</p>
-                  <p><span className="text-gray-400">Description:</span> {selectedCertificate.metadata.description}</p>
+              <div className="bg-slate-800/50 p-4 rounded-lg border border-slate-700/50">
+                <h4 className="font-semibold text-violet-300 mb-3">Metadata Content</h4>
+                <div className="space-y-3">
+                  <p className="flex flex-col"><span className="text-slate-400">Name:</span> <span className="text-slate-200 mt-1">{selectedCertificate.metadata.name}</span></p>
+                  <p className="flex flex-col"><span className="text-slate-400">Description:</span> <span className="text-slate-200 mt-1">{selectedCertificate.metadata.description}</span></p>
                   {selectedCertificate.metadata.attributes && (
                     <div>
-                      <p className="text-gray-400 mb-1">Attributes:</p>
-                      <div className="grid grid-cols-2 gap-2">
+                      <p className="text-slate-400 mb-2">Attributes:</p>
+                      <div className="grid grid-cols-1 gap-2">
                         {selectedCertificate.metadata.attributes.map((attr, index) => (
-                          <div key={index} className="bg-gray-800 p-2 rounded border border-gray-700">
+                          <div key={index} className="p-2 border-t border-violet-500/50">
                             <span className="text-violet-300 text-sm">{attr.trait_type}: </span>
-                            <span>{attr.value}</span>
+                            <span className="text-slate-300">{attr.value}</span>
                           </div>
                         ))}
                       </div>
@@ -942,7 +1024,7 @@ const CertificatesList = () => {
             <div className="mt-6 flex justify-end">
               <button
                 onClick={closeModal}
-                className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors"
+                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 rounded-lg transition-colors border border-slate-700/50"
               >
                 Close
               </button>
@@ -953,22 +1035,22 @@ const CertificatesList = () => {
 
       {/* Image Modal */}
       {showImage && selectedCertificate && (
-        <div className="fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center p-4 z-50">
-          <div className="bg-gray-800 rounded-lg p-6 max-w-4xl w-full border border-gray-700 shadow-xl">
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-slate-900 rounded-lg p-6 max-w-4xl w-full border border-slate-700 shadow-xl">
             <div className="flex justify-between items-center mb-4">
-              <h3 className="text-2xl font-bold text-violet-400">Certificate Image</h3>
+              <h3 className="text-2xl font-bold text-violet-300">Certificate Image</h3>
               <button
                 onClick={closeModal}
-                className="text-gray-400 hover:text-white text-xl"
+                className="text-slate-400 hover:text-white text-2xl  hover:bg-red-500/30 h-10 w-10 rounded-full transition-colors"
               >
                 &times;
               </button>
             </div>
 
-            <div className="relative flex justify-center bg-gray-900/50 p-4 rounded-lg mb-4">
+            <div className="relative flex justify-center bg-slate-800/50 p-4 rounded-lg border border-slate-700/50 mb-4">
               {imageLoading && (
-                <div className="absolute inset-0 flex items-center justify-center bg-gray-800/80 rounded-lg">
-                  <FaSpinner className="animate-spin text-4xl text-violet-500" />
+                <div className="absolute inset-0 flex items-center justify-center bg-slate-900/80 rounded-lg">
+                  <Loading size="large" />
                 </div>
               )}
               <img
@@ -982,21 +1064,21 @@ const CertificatesList = () => {
             </div>
 
             <div className="flex flex-col md:flex-row justify-between gap-4">
-              <div className="text-sm text-gray-400">
+              <div className="text-sm text-slate-400">
                 <p>Certificate ID: {selectedCertificate.id}</p>
                 {selectedCertificate.imageCID && (
                   <p className="truncate">CID: {selectedCertificate.imageCID}</p>
                 )}
               </div>
 
-              <div className="flex space-x-3">
-                {isAdmin && (
+              <div className="flex space-x-2">
+                {isAdmin && !selectedCertificate.isVerified && (
                   <button
                     onClick={() => verifyCertificate(selectedCertificate)}
-                    disabled={actionLoading}
-                    className="flex items-center px-4 py-2 bg-green-600 hover:bg-green-700 rounded-lg transition-colors"
+                    disabled={verifyingId === selectedCertificate.id}
+                    className="flex items-center px-2 py-2 bg-green-600/80 text-sm hover:bg-green-600 rounded-lg transition-colors"
                   >
-                    {actionLoading ? <FaSpinner className="animate-spin mr-2" /> : <FaCheck className="mr-2" />}
+                    {verifyingId === selectedCertificate.id ? <Loading size="small" /> : <FaCheck className="mr-2" />}
                     Verify Certificate
                   </button>
                 )}
@@ -1004,17 +1086,17 @@ const CertificatesList = () => {
                 {isAdmin && !selectedCertificate.isRevoked && (
                   <button
                     onClick={() => openRevokeModal(selectedCertificate)}
-                    disabled={actionLoading}
-                    className="flex items-center px-4 py-2 bg-red-600 hover:bg-red-700 rounded-lg transition-colors"
+                    disabled={revokingId === selectedCertificate.id}
+                    className="flex items-center px-2 py-2 bg-red-600/80 text-sm hover:bg-red-600 rounded-lg transition-colors"
                   >
-                    {actionLoading ? <FaSpinner className="animate-spin mr-2" /> : <FaBan className="mr-2" />}
+                    {revokingId === selectedCertificate.id ? <Loading size="small" /> : <FaBan className="mr-2" />}
                     Revoke Certificate
                   </button>
                 )}
 
                 <button
                   onClick={closeModal}
-                  className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors"
+                  className="px-4 py-2 bg-slate-800 text-sm hover:bg-slate-700 rounded-lg transition-colors border border-slate-700/50"
                 >
                   Close
                 </button>
@@ -1026,28 +1108,28 @@ const CertificatesList = () => {
 
       {/* Revoke Modal */}
       {showRevokeModal && selectedCertificate && (
-        <div className="fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center p-4 z-50">
-          <div className="bg-gray-800 rounded-lg p-6 max-w-md w-full border border-red-900/30 shadow-xl">
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-slate-900 rounded-lg p-6 max-w-md w-full border border-red-900/30 shadow-xl">
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-2xl font-bold text-red-400">Revoke Certificate</h3>
               <button
                 onClick={closeModal}
-                className="text-gray-400 hover:text-white text-xl"
+                className="text-slate-400 hover:text-white text-2xl  hover:bg-red-500/30 h-10 w-10 rounded-full transition-colors"
               >
                 &times;
               </button>
             </div>
 
-            <p className="mb-4 text-gray-300">You are about to revoke certificate <span className="font-semibold">#{selectedCertificate.id}</span> for course <span className="font-semibold">{selectedCertificate.courseName}</span>.</p>
+            <p className="mb-4 text-slate-300">You are about to revoke certificate <span className="font-semibold text-white">#{selectedCertificate.id}</span> for course <span className="font-semibold text-white">{selectedCertificate.courseName}</span>.</p>
 
             <form onSubmit={handleRevokeSubmit}>
               <div className="mb-4">
-                <label htmlFor="revocationReason" className="block text-gray-400 mb-1">Reason for Revocation</label>
+                <label htmlFor="revocationReason" className="block text-slate-400 mb-1">Reason for Revocation</label>
                 <textarea
                   id="revocationReason"
                   value={revocationReason}
                   onChange={(e) => setRevocationReason(e.target.value)}
-                  className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 text-white"
+                  className="w-full px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 text-white"
                   rows={3}
                   placeholder="Enter reason for revocation..."
                   required
@@ -1058,16 +1140,16 @@ const CertificatesList = () => {
                 <button
                   type="button"
                   onClick={closeModal}
-                  className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors"
+                  className="px-4 py-2 bg-slate-800 hover:bg-slate-700 rounded-lg transition-colors border border-slate-700/50"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  disabled={actionLoading}
-                  className="flex items-center px-4 py-2 bg-red-600 hover:bg-red-700 rounded-lg transition-colors"
+                  disabled={revokingId === selectedCertificate.id}
+                  className="flex items-center px-4 py-2 bg-red-600/80 hover:bg-red-600 rounded-lg transition-colors"
                 >
-                  {actionLoading ? <FaSpinner className="animate-spin mr-2" /> : <FaBan className="mr-2" />}
+                  {revokingId === selectedCertificate.id ? <Loading size="small" /> : <FaBan className="mr-2" />}
                   Confirm Revocation
                 </button>
               </div>
