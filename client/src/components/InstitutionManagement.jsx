@@ -20,8 +20,8 @@ const InstitutionManagement = () => {
     try {
       const provider = new ethers.BrowserProvider(window.ethereum);
       const contract = new ethers.Contract(
-        contractAddress.CertificateNFT,
-        contractABI.CertificateNFT,
+        contractAddress.SoulboundCertificateNFT,
+        contractABI.SoulboundCertificateNFT,
         provider
       );
 
@@ -52,8 +52,8 @@ const InstitutionManagement = () => {
       const provider = new ethers.BrowserProvider(window.ethereum);
       const signer = await provider.getSigner();
       const contract = new ethers.Contract(
-        contractAddress.CertificateNFT,
-        contractABI.CertificateNFT,
+        contractAddress.SoulboundCertificateNFT,
+        contractABI.SoulboundCertificateNFT,
         signer
       );
 
@@ -80,8 +80,8 @@ const InstitutionManagement = () => {
       const provider = new ethers.BrowserProvider(window.ethereum);
       const signer = await provider.getSigner();
       const contract = new ethers.Contract(
-        contractAddress.CertificateNFT,
-        contractABI.CertificateNFT,
+        contractAddress.SoulboundCertificateNFT,
+        contractABI.SoulboundCertificateNFT,
         signer
       );
 

@@ -16,17 +16,26 @@ async function updateFrontendConfig(network, contractAddress) {
     return;
   }
   
+  // Remove any old CertificateNFT references
+  if (config.CertificateNFT) {
+    delete config.CertificateNFT;
+  }
+  
   // Update the network-specific address
   if (config[network]) {
-    config[network].CertificateNFT = contractAddress;
+    // Remove old reference if exists
+    if (config[network].CertificateNFT) {
+      delete config[network].CertificateNFT;
+    }
+    config[network].SoulboundCertificateNFT = contractAddress;
   } else {
-    config[network] = { CertificateNFT: contractAddress };
+    config[network] = { SoulboundCertificateNFT: contractAddress };
   }
   
   // If the network is sepolia, also update the default
   if (network === 'sepolia') {
     config.defaultNetwork = 'sepolia';
-    config.CertificateNFT = contractAddress;
+    config.SoulboundCertificateNFT = contractAddress;
   }
   
   // Write the updated config back to the file

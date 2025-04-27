@@ -19,6 +19,7 @@ const Dashboard = () => {
     verifiedCertificates: 0
   });
   const [lastUpdated, setLastUpdated] = useState(null);
+  const [lastBlockNumber, setLastBlockNumber] = useState(null);
 
   const INSTITUTION_ROLE = useMemo(() => ethers.keccak256(ethers.toUtf8Bytes('INSTITUTION_ROLE')), []);
   const DEFAULT_ADMIN_ROLE = useMemo(() => ethers.ZeroHash, []);
@@ -30,8 +31,8 @@ const Dashboard = () => {
     try {
       const provider = new ethers.BrowserProvider(window.ethereum);
       const contract = new ethers.Contract(
-        contractAddress.CertificateNFT,
-        contractABI.CertificateNFT,
+        contractAddress.SoulboundCertificateNFT,
+        contractABI.SoulboundCertificateNFT,
         provider
       );
       
@@ -224,7 +225,7 @@ const Dashboard = () => {
     }
   }, [contract]);
 
-  // Fetch dashboard statistics with caching
+  // Optimize the fetchStats function - MOVED UP before handleCertificateEvent
   const fetchStats = useCallback(async () => {
     if (!contract || !currentAccount) {
       console.log("Missing contract or account, cannot fetch stats");
@@ -234,56 +235,95 @@ const Dashboard = () => {
 
     try {
       console.log("Fetching dashboard stats for account:", currentAccount);
-      console.log("Roles - Admin:", isAdmin, "Institution:", isInstitution);
+      setIsLoading(true);
+
+      // Get all events from the beginning (block 0)
+      const filter = {
+        fromBlock: 0,
+        toBlock: 'latest'
+      };
+
+      // Fetch all required data in parallel for better performance
+      const [
+        totalSupply,
+        verifiedEvents,
+        issuedEvents,
+        authorizedEvents,
+        revokedEvents,
+        roleGrantedEvents,
+        roleRevokedEvents
+      ] = await Promise.all([
+        contract.totalSupply(),
+        contract.queryFilter(contract.filters.CertificateVerified(), filter.fromBlock, filter.toBlock),
+        contract.queryFilter(contract.filters.CertificateIssued(null, null, currentAccount), filter.fromBlock, filter.toBlock),
+        contract.queryFilter(contract.filters.InstitutionAuthorized(), filter.fromBlock, filter.toBlock),
+        contract.queryFilter(contract.filters.InstitutionRevoked(), filter.fromBlock, filter.toBlock),
+        contract.queryFilter(contract.filters.RoleGranted(INSTITUTION_ROLE), filter.fromBlock, filter.toBlock),
+        contract.queryFilter(contract.filters.RoleRevoked(INSTITUTION_ROLE), filter.fromBlock, filter.toBlock)
+      ]);
+
+      // Process institutions using both RoleGranted/Revoked and InstitutionAuthorized/Revoked events
+      const activeInstitutions = new Set();
       
-      // Check if we need to refresh data (every 60 seconds)
-      const now = Date.now();
-      if (lastUpdated && now - lastUpdated < 60000) {
-        console.log("Using cached data from", new Date(lastUpdated).toLocaleTimeString());
-        setIsLoading(false);
-        return; // Use cached data
+      // Add institutions from RoleGranted events
+      roleGrantedEvents.forEach(event => {
+        if (event.args?.account) {
+          activeInstitutions.add(event.args.account.toLowerCase());
+        }
+      });
+
+      // Remove institutions from RoleRevoked events
+      roleRevokedEvents.forEach(event => {
+        if (event.args?.account) {
+          activeInstitutions.delete(event.args.account.toLowerCase());
+        }
+      });
+
+      // Add institutions from InstitutionAuthorized events
+      authorizedEvents.forEach(event => {
+        if (event.args?.institution) {
+          activeInstitutions.add(event.args.institution.toLowerCase());
+        }
+      });
+
+      // Remove institutions from InstitutionRevoked events
+      revokedEvents.forEach(event => {
+        if (event.args?.institution) {
+          activeInstitutions.delete(event.args.institution.toLowerCase());
+        }
+      });
+
+      // Verify each institution still has the role
+      const confirmedInstitutions = new Set();
+      for (const institution of activeInstitutions) {
+        try {
+          const hasRole = await contract.hasRole(INSTITUTION_ROLE, institution);
+          if (hasRole) {
+            confirmedInstitutions.add(institution);
+          }
+        } catch (error) {
+          console.error(`Error checking role for institution ${institution}:`, error);
+        }
       }
 
-      // Always get total certificates and verified certificates
-      const totalCertificatesPromise = contract.totalSupply();
-      const verifiedCertsPromise = countVerifiedCertificates();
-      
-      // Conditionally get other stats
-      let institutionsPromise = Promise.resolve(0);
-      let issuedCertsPromise = Promise.resolve(0);
-      
-      // Get institutions count even if not admin to display in UI
-      institutionsPromise = countInstitutions();
-      
-      // Get issued certificates even if not institution to display in UI
-      issuedCertsPromise = countIssuedCertificates(currentAccount);
-
-      // Use Promise.all for parallel execution
-      const [totalCertificates, institutions, issuedCerts, verifiedCerts] = await Promise.all([
-        totalCertificatesPromise,
-        institutionsPromise,
-        issuedCertsPromise,
-        verifiedCertsPromise
-      ]);
-      
-      console.log("Stats retrieved:", {
-        totalCertificates: totalCertificates.toString(),
-        totalInstitutions: institutions.toString(),
-        issuedCertificates: issuedCerts.toString(),
-        verifiedCertificates: verifiedCerts.toString()
-      });
-
+      // Update stats with real-time data
       setStats({
-        totalCertificates: totalCertificates.toString(),
-        totalInstitutions: institutions.toString(),
-        issuedCertificates: issuedCerts.toString(),
-        verifiedCertificates: verifiedCerts.toString()
+        totalCertificates: totalSupply.toString(),
+        verifiedCertificates: verifiedEvents.length.toString(),
+        totalInstitutions: confirmedInstitutions.size.toString(),
+        issuedCertificates: issuedEvents.length.toString()
+      });
+
+      setLastUpdated(Date.now());
+      console.log("Updated stats:", {
+        totalCertificates: totalSupply.toString(),
+        verifiedCertificates: verifiedEvents.length,
+        totalInstitutions: confirmedInstitutions.size,
+        issuedCertificates: issuedEvents.length
       });
       
-      setLastUpdated(now);
     } catch (error) {
       console.error('Error fetching dashboard stats:', error);
-      // Display error in UI
       setStats(prevStats => ({
         ...prevStats,
         error: error.message || "Failed to fetch stats"
@@ -291,7 +331,54 @@ const Dashboard = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [contract, currentAccount, isAdmin, isInstitution, countInstitutions, countIssuedCertificates, countVerifiedCertificates, lastUpdated]);
+  }, [contract, currentAccount, INSTITUTION_ROLE]);
+
+  // Add event handlers for real-time updates
+  const handleCertificateEvent = useCallback(() => {
+    // Refresh stats when any certificate-related event occurs
+    fetchStats();
+  }, [fetchStats]);
+
+  // Setup event listeners
+  useEffect(() => {
+    if (!contract) return;
+
+    const setupEventListeners = async () => {
+      // Listen for all relevant events
+      const issueFilter = contract.filters.CertificateIssued();
+      const verifyFilter = contract.filters.CertificateVerified();
+      const revokeFilter = contract.filters.CertificateRevoked();
+      const institutionFilter = contract.filters.InstitutionAuthorized();
+      const institutionRevokeFilter = contract.filters.InstitutionRevoked();
+
+      contract.on(issueFilter, handleCertificateEvent);
+      contract.on(verifyFilter, handleCertificateEvent);
+      contract.on(revokeFilter, handleCertificateEvent);
+      contract.on(institutionFilter, handleCertificateEvent);
+      contract.on(institutionRevokeFilter, handleCertificateEvent);
+
+      // Also listen for new blocks to keep stats fresh
+      if (provider) {
+        provider.on('block', async (blockNumber) => {
+          setLastBlockNumber(blockNumber);
+          // Refresh stats every 5 blocks (approximately 1 minute on most networks)
+          if (blockNumber % 5 === 0) {
+            await fetchStats();
+          }
+        });
+      }
+    };
+
+    setupEventListeners();
+
+    // Cleanup listeners
+    return () => {
+      contract.removeAllListeners();
+      if (provider) {
+        provider.removeAllListeners('block');
+      }
+    };
+  }, [contract, provider, handleCertificateEvent, fetchStats]);
 
   // Initialize wallet connection and contract
   useEffect(() => {
@@ -829,7 +916,7 @@ const Dashboard = () => {
                       <div className="flex justify-between items-center mb-1">
                         <span className="text-xs text-gray-400">Contract Address</span>
                         <span className="text-xs font-mono text-blue-300 truncate max-w-[150px]">
-                          {contractAddress.CertificateNFT ? contractAddress.CertificateNFT.slice(0, 6) + '...' + contractAddress.CertificateNFT.slice(-4) : 'N/A'}
+                          {contractAddress.SoulboundCertificateNFT ? contractAddress.SoulboundCertificateNFT.slice(0, 6) + '...' + contractAddress.SoulboundCertificateNFT.slice(-4) : 'N/A'}
                         </span>
                       </div>
                       <div className="flex justify-between items-center">

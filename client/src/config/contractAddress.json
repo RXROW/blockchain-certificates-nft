@@ -1,7 +1,7 @@
 {
-  "CertificateNFT": "0x952dd3e14EF6CB7294977E196a665ad19B1507D3",
   "sepolia": {
-    "CertificateNFT": "0x952dd3e14EF6CB7294977E196a665ad19B1507D3"
+    "SoulboundCertificateNFT": "0x968c0A6da209FF167a79057DbaE2e985Fd8fBD65"
   },
-  "defaultNetwork": "sepolia"
+  "defaultNetwork": "sepolia",
+  "SoulboundCertificateNFT": "0x968c0A6da209FF167a79057DbaE2e985Fd8fBD65"
 }
