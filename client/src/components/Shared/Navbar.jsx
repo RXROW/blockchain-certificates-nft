@@ -95,7 +95,7 @@ function Navbar() {
       // Detect Edge and use alternative approach
       if (navigator.userAgent.includes('Edg')) {
         console.log('Edge browser detected, using alternative method');
-        
+
         // First check existing accounts
         const existingAccounts = await window.ethereum.request({ method: 'eth_accounts' });
         if (existingAccounts && existingAccounts.length > 0) {
@@ -104,20 +104,20 @@ function Navbar() {
           await checkRoles(existingAccounts[0]);
           return;
         }
-        
+
         // For Edge, only use eth_requestAccounts with no extra parameters
         const accounts = await window.ethereum.request({
           method: 'eth_requestAccounts',
           params: [] // Empty params to avoid permission issues
         });
-        
+
         if (accounts && accounts.length > 0) {
           setAccount(accounts[0]);
           await checkRoles(accounts[0]);
         }
         return;
       }
-      
+
       // Standard approach for other browsers
       const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
       if (accounts.length > 0) {
@@ -157,37 +157,37 @@ function Navbar() {
         setAccount('');
         setIsAdmin(false);
         setIsInstitution(false);
-        
+
         // Just use eth_requestAccounts directly for Edge
         const accounts = await window.ethereum.request({
           method: 'eth_requestAccounts',
           params: [] // Empty params to avoid permission issues
         });
-        
+
         if (accounts && accounts.length > 0) {
           setAccount(accounts[0]);
           await checkRoles(accounts[0]);
         }
-        
+
         setDropdownOpen(false);
         return;
       }
-      
+
       // Standard approach for other browsers
       await window.ethereum.request({
         method: 'wallet_requestPermissions',
         params: [{ eth_accounts: {} }]
       });
-      
-      const accounts = await window.ethereum.request({ 
-        method: 'eth_requestAccounts' 
+
+      const accounts = await window.ethereum.request({
+        method: 'eth_requestAccounts'
       });
-      
+
       if (accounts.length > 0) {
         setAccount(accounts[0]);
         await checkRoles(accounts[0]);
       }
-      
+
       setDropdownOpen(false);
     } catch (error) {
       console.error('Error switching account:', error);
@@ -287,7 +287,7 @@ function Navbar() {
           ) : (
             <button
               onClick={connectWallet}
-                className=" Nav-btn "
+              className=" Nav-btn "
             >
               <i className="fas fa-wallet"></i>
               <span>Connect Wallet</span>
