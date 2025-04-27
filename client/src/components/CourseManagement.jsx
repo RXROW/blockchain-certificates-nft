@@ -102,8 +102,8 @@ const CourseManagement = ({ isInstitution }) => {
 
       const provider = new BrowserProvider(window.ethereum);
       const contract = new Contract(
-        contractAddress.CertificateNFT,
-        contractABI.CertificateNFT,
+        contractAddress.SoulboundCertificateNFT,
+        contractABI.SoulboundCertificateNFT,
         provider
       );
 
@@ -226,8 +226,8 @@ const CourseManagement = ({ isInstitution }) => {
       const provider = new BrowserProvider(window.ethereum);
       const signer = await provider.getSigner();
       const contract = new Contract(
-        contractAddress.CertificateNFT,
-        contractABI.CertificateNFT,
+        contractAddress.SoulboundCertificateNFT,
+        contractABI.SoulboundCertificateNFT,
         signer
       );
 

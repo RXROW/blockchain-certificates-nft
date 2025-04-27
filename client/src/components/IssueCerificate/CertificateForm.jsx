@@ -18,6 +18,16 @@ const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
 const ALLOWED_FILE_TYPES = ['image/jpeg', 'image/png', 'image/gif'];
 const COURSES_CACHE_KEY = 'courses_cache';
 
+// Helper function to generate a unique certificate ID
+const generateUniqueCertificateId = (courseId, studentAddress) => {
+  const timestamp = Date.now();
+  const randomPart = Math.random().toString(36).substring(2, 8);
+  const courseIdShort = courseId.substring(0, 4);
+  const studentShort = studentAddress.substring(2, 6);
+  
+  return `${courseIdShort}-${studentShort}-${timestamp.toString(36)}-${randomPart}`;
+};
+
 function CertificateForm() {
   const [formData, setFormData] = useState({
     studentAddress: '',
@@ -37,6 +47,7 @@ function CertificateForm() {
   const [touchedFields, setTouchedFields] = useState({});
   const [courses, setCourses] = useState([]);
   const [loadingCourses, setLoadingCourses] = useState(false);
+  const [uniqueCertId, setUniqueCertId] = useState('');
 
   // Load courses when component mounts
   useEffect(() => {
@@ -66,8 +77,8 @@ function CertificateForm() {
       // If no valid cache, fetch from blockchain
       const provider = new ethers.BrowserProvider(window.ethereum);
       const contract = new ethers.Contract(
-        contractAddress.CertificateNFT,
-        contractABI.CertificateNFT,
+        contractAddress.SoulboundCertificateNFT,
+        contractABI.SoulboundCertificateNFT,
         provider
       );
 
@@ -228,7 +239,11 @@ function CertificateForm() {
       // Get the course name to include in metadata
       const selectedCourse = courses.find(course => course.id === formData.courseId);
       const courseName = selectedCourse ? selectedCourse.name : "Unknown Course";
-
+      
+      // Generate a unique certificate ID
+      const generatedCertId = generateUniqueCertificateId(formData.courseId, formData.studentAddress);
+      setUniqueCertId(generatedCertId);
+      
       // Create or get a group for this course
       setUploadProgress(5);
       toast.loading('Creating course group...', { id: toastId });
@@ -260,7 +275,7 @@ function CertificateForm() {
       setUploadProgress(70);
       toast.loading('Creating and uploading metadata...', { id: toastId });
 
-      const metadata = createCertificateMetadata(imageCID, courseName);
+      const metadata = createCertificateMetadata(imageCID, courseName, generatedCertId);
       const metadataCID = await uploadJSONToIPFS(
         metadata,
         (progress) => {
@@ -283,7 +298,7 @@ function CertificateForm() {
       await mintCertificateOnBlockchain(metadataCID, toastId);
 
       toast.success('Certificate issued successfully!', { id: toastId });
-      setSuccess('Certificate issued successfully!');
+      setSuccess(`Certificate issued successfully! Unique ID: ${generatedCertId}`);
 
       // Reset form
       resetForm();
@@ -292,12 +307,21 @@ function CertificateForm() {
     }
   };
 
-  const createCertificateMetadata = (imageCID, courseName) => {
+  const createCertificateMetadata = (imageCID, courseName, certId) => {
+    // Generate certificate title if not provided
+    const certificateTitle = formData.certificateData.trim() || 
+      `${courseName} Certificate for ${formData.studentAddress.substring(0, 6)}...`;
+    
     return {
-      name: formData.certificateData,
+      name: certificateTitle,
       description: "Academic Certificate",
       image: `ipfs://${imageCID}`,
+      uniqueId: certId,
       attributes: [
+        {
+          trait_type: "Certificate ID",
+          value: certId
+        },
         {
           trait_type: "Course ID",
           value: formData.courseId
@@ -321,6 +345,7 @@ function CertificateForm() {
       ],
       courseId: formData.courseId,
       courseName: courseName,
+      uniqueCertificateId: certId,
       grade: formData.grade,
       studentAddress: formData.studentAddress,
       issueDate: new Date().toISOString()
@@ -332,8 +357,8 @@ function CertificateForm() {
     const provider = new ethers.BrowserProvider(window.ethereum);
     const signer = await provider.getSigner();
     const contract = new ethers.Contract(
-      contractAddress.CertificateNFT,
-      contractABI.CertificateNFT,
+      contractAddress.SoulboundCertificateNFT,
+      contractABI.SoulboundCertificateNFT,
       signer
     );
 
