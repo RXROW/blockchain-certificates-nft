@@ -66,9 +66,9 @@ export default function Slider() {
         slidesPerView={3}
         className="mt-12"
         breakpoints={{
-          640: { slidesPerView: 1 },
-          768: { slidesPerView: 2 },
-          1024: { slidesPerView: 3 },
+          640: { slidesPerView: 2 },
+          768: { slidesPerView: 3 },
+          1024: { slidesPerView: 4 },
         }}
         freeMode={true}
         grabCursor={true}
