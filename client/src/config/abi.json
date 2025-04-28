@@ -1626,7 +1626,7 @@
     },
     {
       "inputs": [],
-      "name": "renounceOwnership ",
+      "name": "renounceOwnership",
       "outputs": [],
       "stateMutability": "nonpayable",
       "type": "function"
