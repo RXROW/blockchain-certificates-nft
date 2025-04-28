@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { ethers } from 'ethers';
 import toast from 'react-hot-toast';
 import contractAddress from '../../config/contractAddress.json';
@@ -17,6 +17,8 @@ import IPFSResultsPanel from './IPFSResultsPanel';
 const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
 const ALLOWED_FILE_TYPES = ['image/jpeg', 'image/png', 'image/gif'];
 const COURSES_CACHE_KEY = 'courses_cache';
+const AUTH_CHECK_INTERVAL = 15000; // Check authorization every 15 seconds
+const TOAST_DEBOUNCE_TIME = 3000; // Prevent duplicate toasts within 3 seconds
 
 // Helper function to generate a unique certificate ID
 const generateUniqueCertificateId = (courseId, studentAddress) => {
@@ -48,11 +50,155 @@ function CertificateForm() {
   const [courses, setCourses] = useState([]);
   const [loadingCourses, setLoadingCourses] = useState(false);
   const [uniqueCertId, setUniqueCertId] = useState('');
+  const [isAuthorized, setIsAuthorized] = useState(false);
+  const [userAddress, setUserAddress] = useState('');
+  const [checkingAuth, setCheckingAuth] = useState(true);
+  
+  // Refs for cleanup and preventing memory leaks
+  const authCheckIntervalRef = useRef(null);
+  const isComponentMounted = useRef(true);
+  // Refs for toast debouncing
+  const lastToastTimeRef = useRef({
+    revoked: 0,
+    authorized: 0
+  });
 
-  // Load courses when component mounts
-  useEffect(() => {
-    fetchCourses();
+  // Function to show toast with debounce
+  const showDebouncedToast = useCallback((type, message, options = {}) => {
+    const currentTime = Date.now();
+    
+    // Only show toast if enough time has passed since the last same-type toast
+    if (currentTime - lastToastTimeRef.current[type] > TOAST_DEBOUNCE_TIME) {
+      toast[type](message, options);
+      lastToastTimeRef.current[type] = currentTime;
+      return true;
+    }
+    return false;
   }, []);
+
+  // Memoize the checkAuthorization function so it can be used in useEffect cleanup
+  const checkAuthorization = useCallback(async (showToast = false) => {
+    if (!isComponentMounted.current) return;
+    
+    try {
+      setCheckingAuth(true);
+      
+      // Skip check if no provider is available
+      if (!window.ethereum) {
+        setError('No Ethereum provider detected. Please install MetaMask.');
+        setIsAuthorized(false);
+        setCheckingAuth(false);
+        return;
+      }
+      
+      const provider = new ethers.BrowserProvider(window.ethereum);
+      
+      // Get current address
+      const signer = await provider.getSigner();
+      const address = await signer.getAddress();
+      
+      // Only update if address changed
+      if (address !== userAddress) {
+        setUserAddress(address);
+      }
+      
+      const contract = new ethers.Contract(
+        contractAddress.SoulboundCertificateNFT,
+        contractABI.SoulboundCertificateNFT,
+        provider
+      );
+      
+      // Check if institution has the role and is authorized
+      const hasRole = await contract.hasRole(await contract.INSTITUTION_ROLE(), address);
+      const authorized = await contract.authorizedInstitutions(address);
+      
+      const wasAuthorized = isAuthorized;
+      const newAuthStatus = hasRole && authorized;
+      
+      // Only update state if authorization status changed or first check
+      if (wasAuthorized !== newAuthStatus || checkingAuth) {
+        setIsAuthorized(newAuthStatus);
+        
+        // Only show toasts when status actually changes, not on first load
+        if (showToast && wasAuthorized !== newAuthStatus) {
+          if (!newAuthStatus && wasAuthorized) {
+            // Use debounced toast for revocation
+            showDebouncedToast('error', 'Your institution authorization has been revoked!', { duration: 5000 });
+            setError('Your institution is no longer authorized to issue certificates.');
+          } else if (newAuthStatus && !wasAuthorized) {
+            // Use debounced toast for authorization
+            showDebouncedToast('success', 'Your institution is now authorized!', { duration: 3000 });
+            setError('');
+          }
+        } else {
+          if (!hasRole) {
+            setError('Your account does not have the institution role. You cannot issue certificates.');
+          } else if (!authorized) {
+            setError('Your institution has been revoked and is not authorized to issue certificates.');
+          } else {
+            setError('');
+          }
+        }
+      }
+    } catch (err) {
+      console.error('Error checking authorization:', err);
+      if (showToast) {
+        toast.error('Failed to verify institution authorization status');
+      }
+      setError('Failed to check institution authorization status.');
+    } finally {
+      if (isComponentMounted.current) {
+        setCheckingAuth(false);
+      }
+    }
+  }, [isAuthorized, userAddress, checkingAuth, showDebouncedToast]);
+
+  // Load courses and check authorization when component mounts
+  useEffect(() => {
+    isComponentMounted.current = true;
+    
+    fetchCourses();
+    // Don't show toast on initial load
+    checkAuthorization(false);
+    
+    // Set up periodic auth checking
+    authCheckIntervalRef.current = setInterval(() => {
+      // Show toast for automatic checks if status changes
+      checkAuthorization(true);
+    }, AUTH_CHECK_INTERVAL);
+    
+    // Set up account change listener
+    const handleAccountsChanged = (accounts) => {
+      if (accounts.length > 0 && accounts[0] !== userAddress) {
+        // Address changed, re-check authorization
+        checkAuthorization(true);
+      }
+    };
+    
+    // Set up network change listener
+    const handleChainChanged = () => {
+      // Network changed, re-check authorization
+      checkAuthorization(true);
+    };
+    
+    if (window.ethereum) {
+      window.ethereum.on('accountsChanged', handleAccountsChanged);
+      window.ethereum.on('chainChanged', handleChainChanged);
+    }
+    
+    // Clean up
+    return () => {
+      isComponentMounted.current = false;
+      if (authCheckIntervalRef.current) {
+        clearInterval(authCheckIntervalRef.current);
+      }
+      
+      if (window.ethereum) {
+        window.ethereum.removeListener('accountsChanged', handleAccountsChanged);
+        window.ethereum.removeListener('chainChanged', handleChainChanged);
+      }
+    };
+  }, [checkAuthorization]);
 
   const fetchCourses = async () => {
     try {
@@ -203,6 +349,15 @@ function CertificateForm() {
 
   const mintCertificate = async () => {
     try {
+      // Check authorization status right before proceeding
+      await checkAuthorization(false);
+      
+      // Verify authorization again before proceeding
+      if (!isAuthorized) {
+        toast.error('Your institution is not authorized to issue certificates');
+        return;
+      }
+
       // Mark all fields as touched
       setTouchedFields({
         studentAddress: true,
@@ -362,6 +517,12 @@ function CertificateForm() {
       signer
     );
 
+    // Verify authorization status one last time before transaction
+    const isStillAuthorized = await contract.authorizedInstitutions(userAddress);
+    if (!isStillAuthorized) {
+      throw new Error("Your institution's authorization status has changed. You cannot issue certificates.");
+    }
+
     // Create the IPFS URI with ipfs:// prefix
     const tokenURI = `ipfs://${metadataCID}`;
     console.log('Setting token URI:', tokenURI);
@@ -449,13 +610,26 @@ function CertificateForm() {
       {error && <ErrorMessage message={error} />}
       {success && <SuccessMessage message={success} />}
 
+      {!isAuthorized && !checkingAuth && (
+        <div className="p-4 bg-red-900/50 border border-red-800 rounded-lg text-white">
+          <h3 className="text-lg font-medium">Authorization Error</h3>
+          <p className="mt-1">Your institution is not authorized to issue certificates. Please contact the administrator.</p>
+          <button 
+            onClick={() => checkAuthorization(true)}
+            className="mt-2 px-4 py-1 bg-red-700 hover:bg-red-600 rounded text-sm font-medium transition-colors"
+          >
+            Check Status Again
+          </button>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
         <StudentInfoForm
           formData={formData}
           onInputChange={handleInputChange}
           validationErrors={validationErrors}
           touchedFields={touchedFields}
-          loading={loading}
+          loading={loading || !isAuthorized}
           courses={courses}
           loadingCourses={loadingCourses}
         />
@@ -464,7 +638,7 @@ function CertificateForm() {
           <CertificateImageUpload
             imagePreview={imagePreview}
             onImageUpload={handleImageUpload}
-            loading={loading}
+            loading={loading || !isAuthorized}
             validationError={validationErrors.certificateImage}
             touched={touchedFields.certificateImage}
           />
@@ -487,7 +661,7 @@ function CertificateForm() {
       <div className="flex justify-end">
         <button
           onClick={mintCertificate}
-          disabled={loading}
+          disabled={loading || !isAuthorized || checkingAuth}
           className="px-8 py-4 bg-gradient-to-r from-violet-500 to-pink-500 text-white rounded-lg font-medium hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {loading ? (
@@ -495,6 +669,13 @@ function CertificateForm() {
               <LoadingSpinner size="small" />
               <span>Processing...</span>
             </div>
+          ) : checkingAuth ? (
+            <div className="flex items-center gap-2">
+              <LoadingSpinner size="small" />
+              <span>Checking Authorization...</span>
+            </div>
+          ) : !isAuthorized ? (
+            'Not Authorized'
           ) : (
             'Mint Certificate'
           )}
