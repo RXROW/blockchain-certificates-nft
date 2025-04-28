@@ -75,12 +75,12 @@ export default function Slider() {
       >
         {people.map((person, index) => (
           <SwiperSlide key={index}>
-          <div className="group relative bg-blue-500/10 rounded-2xl p-4 transition-all duration-300 hover:shadow-[0_0_20px_rgba(99,102,241,0.5)]">
+          <div className="group relative bg-blue-500/10 rounded-xl p-4 transition-all duration-300 ">
         
             <img
               src={person.img}
               alt={person.name}
-              className="rounded-xl mx-auto mb-4 transition-transform duration-300 group-hover:scale-105"
+              className="rounded mx-auto mb-4 transition-transform duration-300 group-hover:scale-105"
             />
         
             <div className="absolute inset-0 bg-black bg-opacity-60 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white transition-opacity duration-300">

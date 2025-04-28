@@ -1,9 +1,380 @@
-import React from 'react'
+import React, { useState, useEffect } from 'react';
+import LoadingSpinner from '../../components/Shared/LoadingSpinner';
+import InstitutionsForm from '../../components/Institutions/InstitutionsForm';
+import toast from 'react-hot-toast';
+
+// Dummy data for institutions
+const DUMMY_INSTITUTIONS = [
+  { id: 1, address: '0x1234567890123456789012345678901234567890', name: 'University of Technology', status: 'active', addedDate: '2023-05-15' },
+  { id: 2, address: '0x2345678901234567890123456789012345678901', name: 'Institute of Science', status: 'active', addedDate: '2023-06-20' },
+  { id: 3, address: '0x3456789012345678901234567890123456789012', name: 'Research Center', status: 'active', addedDate: '2023-07-10' },
+  { id: 4, address: '0x4567890123456789012345678901234567890123', name: 'Technical College', status: 'active', addedDate: '2023-08-05' },
+  { id: 5, address: '0x5678901234567890123456789012345678901234', name: 'Engineering School', status: 'active', addedDate: '2023-09-12' },
+];
 
 const ManageInstitutions = () => {
-  return (
-    <div className='mt-28 text-white'>ManageInstitutions</div>
-  )
-}
+  const [institutions, setInstitutions] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+  const [isAdmin, setIsAdmin] = useState(true); // Set to true for demo purposes
+  const [showConfirmDialog, setShowConfirmDialog] = useState(false);
+  const [institutionToDelete, setInstitutionToDelete] = useState(null);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [filterStatus, setFilterStatus] = useState('all');
+  const [viewMode, setViewMode] = useState('table'); // 'table' or 'grid'
 
-export default ManageInstitutions
+  useEffect(() => {
+    // Simulate loading data
+    setLoading(true);
+    setTimeout(() => {
+      setInstitutions(DUMMY_INSTITUTIONS);
+      setLoading(false);
+    }, 1000);
+  }, []);
+
+  const handleInstitutionSuccess = (message) => {
+    setSuccess(message);
+    toast.success(message);
+
+    // Simulate adding a new institution
+    const newInstitution = {
+      id: institutions.length + 1,
+      address: message.split(' ')[0], // Extract address from success message
+      name: `New Institution ${institutions.length + 1}`,
+      status: 'active',
+      addedDate: new Date().toISOString().split('T')[0]
+    };
+
+    setInstitutions([...institutions, newInstitution]);
+  };
+
+  const handleInstitutionError = (message) => {
+    setError(message);
+    toast.error(message);
+  };
+
+  const confirmDeleteInstitution = (institution) => {
+    setInstitutionToDelete(institution);
+    setShowConfirmDialog(true);
+  };
+
+  const cancelDelete = () => {
+    setShowConfirmDialog(false);
+    setInstitutionToDelete(null);
+  };
+
+  const deleteInstitution = async () => {
+    if (!institutionToDelete) return;
+
+    try {
+      setLoading(true);
+      setError('');
+      setSuccess('');
+
+      // Simulate API call delay
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
+      // Remove the institution from the list
+      const updatedInstitutions = institutions.filter(
+        inst => inst.id !== institutionToDelete.id
+      );
+      setInstitutions(updatedInstitutions);
+
+      const successMsg = `Institution ${institutionToDelete.name} deleted successfully`;
+      setSuccess(successMsg);
+      toast.success(successMsg);
+    } catch (err) {
+      console.error('Error deleting institution:', err);
+      const errorMsg = err.message || 'Failed to delete institution';
+      setError(errorMsg);
+      toast.error(errorMsg);
+    } finally {
+      setLoading(false);
+      setShowConfirmDialog(false);
+      setInstitutionToDelete(null);
+    }
+  };
+
+  // Filter institutions based on search term and status
+  const filteredInstitutions = institutions.filter(institution => {
+    const matchesSearch = institution.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      institution.address.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesStatus = filterStatus === 'all' || institution.status === filterStatus;
+    return matchesSearch && matchesStatus;
+  });
+
+  const toggleViewMode = () => {
+    setViewMode(viewMode === 'table' ? 'grid' : 'table');
+  };
+
+  if (!isAdmin) {
+    return (
+      <div className="flex items-center justify-center h-[calc(100vh-200px)]">
+        <div className="text-center">
+          <h2 className="text-2xl font-bold text-red-500 mb-4">Access Denied</h2>
+          <p className="text-gray-400">Only administrators can manage institutions.</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="max-w-7xl bg-gradient-to-br from-slate-950 to-violet-950 mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div className="bg-gray-950/20 rounded-lg shadow-xl p-6 border border-gray-700/20">
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-6">
+          <h2 className="text-2xl font-bold text-white">Manage Institutions</h2>
+          <div className="mt-4 md:mt-0 flex items-center space-x-2">
+            <span className="text-gray-400">Demo Mode</span>
+            <span className="px-2 py-1 bg-green-900/50 text-green-300 text-xs rounded-full">Active</span>
+          </div>
+        </div>
+
+        {/* Add New Institution */}
+        <div className="mb-8">
+          <InstitutionsForm
+            onSuccess={handleInstitutionSuccess}
+            onError={handleInstitutionError}
+          />
+        </div>
+
+        {/* Status Messages */}
+        {error && (
+          <div className="mb-6 p-4 bg-red-900/50 border border-red-700 rounded text-red-200">
+            {error}
+          </div>
+        )}
+        {success && (
+          <div className="mb-6 p-4 bg-green-900/50 border border-green-700 rounded text-green-200">
+            {success}
+          </div>
+        )}
+
+        {/* Search, Filter and View Toggle */}
+        <div className="mb-6 flex flex-col sm:flex-row gap-4">
+          <div className="relative flex-1">
+            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+              <svg className="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+            </div>
+            <input
+              type="text"
+              placeholder="Search institutions..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full pl-10 pr-4 py-2 bg-gray-900 border border-gray-700 rounded text-white placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-violet-500"
+            />
+          </div>
+          <div className="sm:w-48">
+            <select
+              value={filterStatus}
+              onChange={(e) => setFilterStatus(e.target.value)}
+              className="w-full px-4 py-2 bg-gray-900 border border-gray-700 rounded text-white focus:outline-none focus:ring-1 focus:ring-violet-500"
+            >
+              <option value="all">All Status</option>
+              <option value="active">Active</option>
+              <option value="inactive">Inactive</option>
+              <option value="pending">Pending</option>
+            </select>
+          </div>
+          <div className="flex items-center">
+            <button
+              onClick={toggleViewMode}
+              className="px-4 py-2 bg-gray-900 border border-gray-700 rounded text-white hover:bg-gray-800 transition-colors duration-200 flex items-center"
+              title={viewMode === 'table' ? 'Switch to Grid View' : 'Switch to Table View'}
+            >
+              {viewMode === 'table' ? (
+                <>
+                  <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
+                  </svg>
+                  Grid View
+                </>
+              ) : (
+                <>
+                  <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M3 14h18m-9-4v8m-7 0h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                  </svg>
+                  Table View
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+
+        {/* Institutions List */}
+        <div className="bg-gray-900/50 rounded-lg border border-gray-700 overflow-hidden">
+          <div className="px-6 py-4 border-b border-gray-700 flex justify-between items-center">
+            <h3 className="text-lg font-semibold text-white">
+              Current Institutions ({filteredInstitutions.length})
+            </h3>
+            <div className="text-sm text-gray-400">
+              Showing {filteredInstitutions.length} of {institutions.length}
+            </div>
+          </div>
+
+          {loading ? (
+            <div className="flex justify-center items-center p-8">
+              <LoadingSpinner size="medium" />
+            </div>
+          ) : filteredInstitutions.length === 0 ? (
+            <div className="p-8 text-center">
+              <svg className="mx-auto h-12 w-12 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <h3 className="mt-2 text-sm font-medium text-gray-300">No institutions found</h3>
+              <p className="mt-1 text-sm text-gray-500">Try adjusting your search or filter to find what you're looking for.</p>
+            </div>
+          ) : viewMode === 'table' ? (
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-700">
+                <thead className="bg-gray-800/50">
+                  <tr>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
+                      Institution
+                    </th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
+                      Address
+                    </th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
+                      Status
+                    </th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
+                      Added Date
+                    </th>
+                    <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-400 uppercase tracking-wider">
+                      Actions
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-700">
+                  {filteredInstitutions.map((institution) => (
+                    <tr key={institution.id} className="hover:bg-gray-800/30 transition-colors duration-150">
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="flex items-center">
+                          <div className="flex-shrink-0 h-10 w-10 bg-violet-900/40 rounded-lg flex items-center justify-center">
+                            <svg className="h-6 w-6 text-violet-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                            </svg>
+                          </div>
+                          <div className="ml-4">
+                            <div className="text-sm font-medium text-white">{institution.name}</div>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="text-sm text-gray-300 font-mono">{institution.address}</div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-900/50 text-green-300">
+                          {institution.status}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
+                        {institution.addedDate}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                        <button
+                          onClick={() => confirmDeleteInstitution(institution)}
+                          disabled={loading}
+                          className="text-red-400 hover:text-red-300 transition-colors duration-200 flex items-center ml-auto"
+                        >
+                          <svg className="w-5 h-5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                          </svg>
+                          Delete
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="p-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+              {filteredInstitutions.map((institution) => (
+                <div key={institution.id} className="bg-gray-800/30 rounded border border-gray-700/50 p-4 hover:bg-gray-800/50 transition-colors duration-150">
+                  <div className="flex items-start justify-between">
+                    <div className="flex items-center">
+                      <div className="bg-violet-900/40 p-2 rounded-lg">
+                        <svg className="h-6 w-6 text-violet-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                        </svg>
+                      </div>
+                      <div className="ml-3">
+                        <h4 className="text-lg font-medium text-white">{institution.name}</h4>
+                        <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-900/50 text-green-300 mt-1">
+                          {institution.status}
+                        </span>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => confirmDeleteInstitution(institution)}
+                      disabled={loading}
+                      className="text-red-400 hover:text-red-300 transition-colors duration-200"
+                      title="Delete Institution"
+                    >
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                    </button>
+                  </div>
+                  <div className="mt-4">
+                    <div className="text-sm text-gray-400 mb-1">Address:</div>
+                    <div className="text-sm text-gray-300 font-mono break-all">{institution.address}</div>
+                  </div>
+                  <div className="mt-2">
+                    <div className="text-sm text-gray-400 mb-1">Added Date:</div>
+                    <div className="text-sm text-gray-300">{institution.addedDate}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Confirmation Dialog */}
+      {showConfirmDialog && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-gray-800 rounded p-6 max-w-md w-full mx-4 border border-gray-700">
+            <h3 className="text-xl font-bold text-white mb-4">Confirm Deletion</h3>
+            <p className="text-gray-300 mb-6">
+              Are you sure you want to delete <span className="font-semibold text-white">{institutionToDelete.name}</span>? This action cannot be undone.
+            </p>
+            <div className="flex justify-end space-x-4">
+              <button
+                onClick={cancelDelete}
+                className="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded transition-colors duration-200"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={deleteInstitution}
+                disabled={loading}
+                className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
+              >
+                {loading ? (
+                  <>
+                    <LoadingSpinner size="small" />
+                    <span className="ml-2">Deleting...</span>
+                  </>
+                ) : (
+                  <>
+                    <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                    Delete Institution
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default ManageInstitutions;

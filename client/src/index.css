@@ -211,10 +211,91 @@ body {
   100% {
     fill: white;
   }
+}
 
-  /* team component*/
-/* Remove all transition pauses */
+/* team component */
 .swiper-wrapper {
   transition-timing-function: linear !important;
 }
+
+/* 3D Animations for cube loader - optimized for performance */
+.animate-spin-slow {
+  animation: spin 2s linear infinite;
+  will-change: transform;
+  backface-visibility: hidden;
+  transform: translateZ(0);
+}
+
+@keyframes spin {
+  0% {
+    transform: rotateX(0deg) rotateY(0deg);
+  }
+  100% {
+    transform: rotateX(360deg) rotateY(360deg);
+  }
+}
+
+/* Optimize for performance and responsive display */
+@media (prefers-reduced-motion: reduce) {
+  .animate-spin-slow {
+    animation-duration: 10s;
+  }
+}
+
+@media (max-width: 640px) {
+  .perspective-500 {
+    perspective: 400px;
+  }
+}
+
+/* Add custom styles for futuristic grid pattern */
+@layer utilities {
+  /* Digital grid pattern for futuristic backgrounds */
+  .bg-grid-pattern {
+    background-image: 
+      linear-gradient(to right, rgba(127, 64, 216, 0.1) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(127, 64, 216, 0.1) 1px, transparent 1px);
+    background-size: 24px 24px;
+  }
+  
+  /* 3D Transform styles for cube loader */
+  .perspective-500 {
+    perspective: 500px;
+  }
+  
+  .transform-style-3d {
+    transform-style: preserve-3d;
+  }
+  
+  .rotate-y-0 {
+    transform: rotateY(0deg);
+  }
+  
+  .rotate-y-90 {
+    transform: rotateY(90deg);
+  }
+  
+  .rotate-y-180 {
+    transform: rotateY(180deg);
+  }
+  
+  .rotate-y-270 {
+    transform: rotateY(270deg);
+  }
+  
+  .rotate-x-90 {
+    transform: rotateX(90deg);
+  }
+  
+  .rotate-x-270 {
+    transform: rotateX(270deg);
+  }
+  
+  .translate-z-10 {
+    transform: translateZ(10px);
+  }
+  
+  .translate-z-8 {
+    transform: translateZ(8px);
+  }
 }

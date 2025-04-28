@@ -19,8 +19,8 @@ const Sidebar = () => {
     try {
       const provider = new ethers.BrowserProvider(window.ethereum);
       const contract = new ethers.Contract(
-        contractAddress.CertificateNFT,
-        contractABI.CertificateNFT,
+        contractAddress.SoulboundCertificateNFT,
+        contractABI.SoulboundCertificateNFT,
         provider
       );
 

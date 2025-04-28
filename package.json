@@ -9,12 +9,22 @@
     "start": "cd client && npm start"
   },
   "dependencies": {
+    "@chakra-ui/react": "^3.16.1",
+    "@emotion/react": "^11.14.0",
+    "@emotion/styled": "^11.14.0",
     "@openzeppelin/contracts": "^5.2.0",
     "dotenv": "^16.5.0",
     "framer-motion": "^12.9.2",
+
+    "framer-motion": "^12.8.0",
+    "glob": "^11.0.2",
     "ipfs-http-client": "^60.0.1",
+    "lodash": "^4.17.21",
     "react-hot-toast": "^2.5.2",
     "react-slick": "^0.30.3",
+    "react-virtualized-auto-sizer": "^1.0.26",
+    "react-window": "^1.8.11",
+    "react-window-infinite-loader": "^1.0.10",
     "slick-carousel": "^1.8.1",
     "swiper": "^11.2.6",
     "web3": "^4.5.0"

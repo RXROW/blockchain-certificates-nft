@@ -26,8 +26,8 @@ function Navbar() {
     try {
       const provider = new ethers.BrowserProvider(window.ethereum);
       const contract = new ethers.Contract(
-        contractAddress.CertificateNFT,
-        contractABI.CertificateNFT,
+        contractAddress.SoulboundCertificateNFT,
+        contractABI.SoulboundCertificateNFT,
         provider
       );
 
@@ -84,7 +84,7 @@ function Navbar() {
     }
   }, []);
 
-  // Connect wallet
+  // Connect wallet - Vite-friendly implementation
   const connectWallet = async () => {
     if (!window.ethereum) {
       alert('Please install MetaMask!');
@@ -92,6 +92,33 @@ function Navbar() {
     }
 
     try {
+      // Detect Edge and use alternative approach
+      if (navigator.userAgent.includes('Edg')) {
+        console.log('Edge browser detected, using alternative method');
+
+        // First check existing accounts
+        const existingAccounts = await window.ethereum.request({ method: 'eth_accounts' });
+        if (existingAccounts && existingAccounts.length > 0) {
+          console.log('Using existing connection:', existingAccounts[0]);
+          setAccount(existingAccounts[0]);
+          await checkRoles(existingAccounts[0]);
+          return;
+        }
+
+        // For Edge, only use eth_requestAccounts with no extra parameters
+        const accounts = await window.ethereum.request({
+          method: 'eth_requestAccounts',
+          params: [] // Empty params to avoid permission issues
+        });
+
+        if (accounts && accounts.length > 0) {
+          setAccount(accounts[0]);
+          await checkRoles(accounts[0]);
+        }
+        return;
+      }
+
+      // Standard approach for other browsers
       const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
       if (accounts.length > 0) {
         setAccount(accounts[0]);
@@ -99,6 +126,12 @@ function Navbar() {
       }
     } catch (error) {
       console.error('Error connecting wallet:', error);
+      // Show specific messages for common errors
+      if (error.code === 4001) {
+        alert('Please connect your wallet to continue.');
+      } else if (error.code === -32002) {
+        alert('Connection request already pending. Please open MetaMask.');
+      }
     }
   };
 
@@ -110,7 +143,7 @@ function Navbar() {
     setDropdownOpen(false);
   };
 
-  // Switch account by requesting accounts and forcing MetaMask to show account selection dialog
+  // Switch account - Vite-friendly implementation
   const handleSwitchAccount = async () => {
     if (!window.ethereum) {
       alert('Please install MetaMask!');
@@ -118,6 +151,29 @@ function Navbar() {
     }
 
     try {
+      // For Edge browser, avoid wallet_requestPermissions
+      if (navigator.userAgent.includes('Edg')) {
+        console.log('Edge browser detected, using alternative switch method');
+        setAccount('');
+        setIsAdmin(false);
+        setIsInstitution(false);
+
+        // Just use eth_requestAccounts directly for Edge
+        const accounts = await window.ethereum.request({
+          method: 'eth_requestAccounts',
+          params: [] // Empty params to avoid permission issues
+        });
+
+        if (accounts && accounts.length > 0) {
+          setAccount(accounts[0]);
+          await checkRoles(accounts[0]);
+        }
+
+        setDropdownOpen(false);
+        return;
+      }
+
+      // Standard approach for other browsers
       await window.ethereum.request({
         method: 'wallet_requestPermissions',
         params: [{ eth_accounts: {} }]
@@ -135,6 +191,9 @@ function Navbar() {
       setDropdownOpen(false);
     } catch (error) {
       console.error('Error switching account:', error);
+      if (error.code === 4001) {
+        alert('Account selection was cancelled.');
+      }
     }
   };
 
@@ -228,7 +287,7 @@ function Navbar() {
           ) : (
             <button
               onClick={connectWallet}
-                className=" Nav-btn "
+              className=" Nav-btn "
             >
               <i className="fas fa-wallet"></i>
               <span>Connect Wallet</span>

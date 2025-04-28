@@ -3,6 +3,8 @@ import Hero from '../../components/Landing/Hero'
 import React from 'react'
 import Featers from '../../components/Landing/Featers'
 import Team from '../../components/Landing/Team'
+import Certificates from '../../components/Landing/Certificates'
+
  
  const LandingPage = () => {
    return (
@@ -10,6 +12,7 @@ import Team from '../../components/Landing/Team'
        <Hero />
        <HowItWorks />
        <Featers />
+       <Certificates/>
        <Team/>
      </div>
    )
