@@ -56,6 +56,11 @@ module.exports = {
         'spin-slow-reverse': 'spin-reverse 20s linear infinite',
         'scanline': 'scanline 4s ease-in-out infinite',
         'shine': 'shine 2s ease-in-out infinite',
+        'pulse-fast': 'pulse 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+        'orbit': 'orbit 3s linear infinite',
+        'orbit-delayed-1': 'orbit 3s linear 0.5s infinite',
+        'orbit-delayed-2': 'orbit 3s linear 1s infinite',
+        'orbit-delayed-3': 'orbit 3s linear 1.5s infinite',
       },
       keyframes: {
         'spin-reverse': {
@@ -69,6 +74,10 @@ module.exports = {
         'shine': {
           '0%': { transform: 'translateX(-100%)' },
           '100%': { transform: 'translateX(100%)' },
+        },
+        'orbit': {
+          '0%': { transform: 'rotate(0deg) translateX(8px) rotate(0deg)' },
+          '100%': { transform: 'rotate(360deg) translateX(8px) rotate(-360deg)' },
         },
       },
     },

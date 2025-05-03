@@ -30,7 +30,7 @@ const generateUniqueCertificateId = (courseId, studentAddress) => {
   return `${courseIdShort}-${studentShort}-${timestamp.toString(36)}-${randomPart}`;
 };
 
-function CertificateForm() {
+function CertificateForm({ isAdmin = false, userAddress: initialUserAddress = '' }) {
   const [formData, setFormData] = useState({
     studentAddress: '',
     courseId: '',
@@ -50,9 +50,9 @@ function CertificateForm() {
   const [courses, setCourses] = useState([]);
   const [loadingCourses, setLoadingCourses] = useState(false);
   const [uniqueCertId, setUniqueCertId] = useState('');
-  const [isAuthorized, setIsAuthorized] = useState(false);
-  const [userAddress, setUserAddress] = useState('');
-  const [checkingAuth, setCheckingAuth] = useState(true);
+  const [isAuthorized, setIsAuthorized] = useState(isAdmin);
+  const [userAddress, setUserAddress] = useState(initialUserAddress);
+  const [checkingAuth, setCheckingAuth] = useState(!isAdmin);
   
   // Refs for cleanup and preventing memory leaks
   const authCheckIntervalRef = useRef(null);
@@ -78,6 +78,13 @@ function CertificateForm() {
 
   // Memoize the checkAuthorization function so it can be used in useEffect cleanup
   const checkAuthorization = useCallback(async (showToast = false) => {
+    // Skip check if user is already identified as admin from props
+    if (isAdmin) {
+      setIsAuthorized(true);
+      setCheckingAuth(false);
+      return;
+    }
+    
     if (!isComponentMounted.current) return;
     
     try {
@@ -93,13 +100,16 @@ function CertificateForm() {
       
       const provider = new ethers.BrowserProvider(window.ethereum);
       
-      // Get current address
-      const signer = await provider.getSigner();
-      const address = await signer.getAddress();
-      
-      // Only update if address changed
-      if (address !== userAddress) {
-        setUserAddress(address);
+      // Get current address if not already provided
+      let address = userAddress;
+      if (!address) {
+        const signer = await provider.getSigner();
+        address = await signer.getAddress();
+        
+        // Only update if address changed
+        if (address !== userAddress) {
+          setUserAddress(address);
+        }
       }
       
       const contract = new ethers.Contract(
@@ -108,12 +118,19 @@ function CertificateForm() {
         provider
       );
       
+      // Default admin role is always bytes32(0)
+      const DEFAULT_ADMIN_ROLE = '0x0000000000000000000000000000000000000000000000000000000000000000';
+      
+      // Check if account has admin role
+      const hasAdminRole = await contract.hasRole(DEFAULT_ADMIN_ROLE, address);
+      
       // Check if institution has the role and is authorized
       const hasRole = await contract.hasRole(await contract.INSTITUTION_ROLE(), address);
       const authorized = await contract.authorizedInstitutions(address);
       
       const wasAuthorized = isAuthorized;
-      const newAuthStatus = hasRole && authorized;
+      // Account is authorized if it's an admin OR if it has institution role and is authorized
+      const newAuthStatus = hasAdminRole || (hasRole && authorized);
       
       // Only update state if authorization status changed or first check
       if (wasAuthorized !== newAuthStatus || checkingAuth) {
@@ -131,7 +148,10 @@ function CertificateForm() {
             setError('');
           }
         } else {
-          if (!hasRole) {
+          if (hasAdminRole) {
+            // Admin is always authorized
+            setError('');
+          } else if (!hasRole) {
             setError('Your account does not have the institution role. You cannot issue certificates.');
           } else if (!authorized) {
             setError('Your institution has been revoked and is not authorized to issue certificates.');
@@ -151,23 +171,15 @@ function CertificateForm() {
         setCheckingAuth(false);
       }
     }
-  }, [isAuthorized, userAddress, checkingAuth, showDebouncedToast]);
+  }, [isAuthorized, userAddress, checkingAuth, showDebouncedToast, isAdmin]);
 
   // Load courses and check authorization when component mounts
   useEffect(() => {
     isComponentMounted.current = true;
     
     fetchCourses();
-    // Don't show toast on initial load
-    checkAuthorization(false);
     
-    // Set up periodic auth checking
-    authCheckIntervalRef.current = setInterval(() => {
-      // Show toast for automatic checks if status changes
-      checkAuthorization(true);
-    }, AUTH_CHECK_INTERVAL);
-    
-    // Set up account change listener
+    // Define event handlers outside of conditional blocks so they're accessible in cleanup
     const handleAccountsChanged = (accounts) => {
       if (accounts.length > 0 && accounts[0] !== userAddress) {
         // Address changed, re-check authorization
@@ -181,9 +193,24 @@ function CertificateForm() {
       checkAuthorization(true);
     };
     
-    if (window.ethereum) {
-      window.ethereum.on('accountsChanged', handleAccountsChanged);
-      window.ethereum.on('chainChanged', handleChainChanged);
+    // Skip authorization check if isAdmin is true
+    if (!isAdmin) {
+      // Don't show toast on initial load
+      checkAuthorization(false);
+      
+      // Set up periodic auth checking (but not for admins)
+      authCheckIntervalRef.current = setInterval(() => {
+        // Show toast for automatic checks if status changes
+        checkAuthorization(true);
+      }, AUTH_CHECK_INTERVAL);
+      
+      if (window.ethereum) {
+        window.ethereum.on('accountsChanged', handleAccountsChanged);
+        window.ethereum.on('chainChanged', handleChainChanged);
+      }
+    } else {
+      // If admin, we're already authorized
+      setCheckingAuth(false);
     }
     
     // Clean up
@@ -198,7 +225,7 @@ function CertificateForm() {
         window.ethereum.removeListener('chainChanged', handleChainChanged);
       }
     };
-  }, [checkAuthorization]);
+  }, [checkAuthorization, isAdmin]);
 
   const fetchCourses = async () => {
     try {
@@ -349,13 +376,16 @@ function CertificateForm() {
 
   const mintCertificate = async () => {
     try {
-      // Check authorization status right before proceeding
-      await checkAuthorization(false);
-      
-      // Verify authorization again before proceeding
-      if (!isAuthorized) {
-        toast.error('Your institution is not authorized to issue certificates');
-        return;
+      // Skip authorization check for admins
+      if (!isAdmin) {
+        // Check authorization status right before proceeding
+        await checkAuthorization(false);
+        
+        // Verify authorization again before proceeding
+        if (!isAuthorized) {
+          toast.error('Your institution is not authorized to issue certificates');
+          return;
+        }
       }
 
       // Mark all fields as touched
@@ -517,10 +547,19 @@ function CertificateForm() {
       signer
     );
 
-    // Verify authorization status one last time before transaction
-    const isStillAuthorized = await contract.authorizedInstitutions(userAddress);
-    if (!isStillAuthorized) {
-      throw new Error("Your institution's authorization status has changed. You cannot issue certificates.");
+    // If user is admin, skip authorization check
+    if (!isAdmin) {
+      // Get the default admin role
+      const DEFAULT_ADMIN_ROLE = '0x0000000000000000000000000000000000000000000000000000000000000000';
+      
+      // Check if user is admin
+      const hasAdminRole = await contract.hasRole(DEFAULT_ADMIN_ROLE, userAddress);
+      
+      // Verify authorization status one last time before transaction
+      const isStillAuthorized = hasAdminRole || await contract.authorizedInstitutions(userAddress);
+      if (!isStillAuthorized) {
+        throw new Error("Your institution's authorization status has changed. You cannot issue certificates.");
+      }
     }
 
     // Create the IPFS URI with ipfs:// prefix
