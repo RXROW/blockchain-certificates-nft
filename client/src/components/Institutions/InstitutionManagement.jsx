@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { ethers } from 'ethers';
-import contractAddress from '../config/contractAddress.json';
-import contractABI from '../config/abi.json';
-import LoadingSpinner from './Shared/LoadingSpinner';
+import contractAddress from '../../config/contractAddress.json';
+import contractABI from '../../config/abi.json';
+import LoadingSpinner from '../Shared/LoadingSpinner';
 import toast from 'react-hot-toast';
 
 const InstitutionManagement = ({ onSuccess, onError }) => {

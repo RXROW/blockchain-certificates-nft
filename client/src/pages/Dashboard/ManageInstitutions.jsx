@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import LoadingSpinner from '../../components/Shared/LoadingSpinner';
-import InstitutionManagement from '../../components/InstitutionManagement';
+import InstitutionManagement from '../../components/Institutions/InstitutionManagement';
 import toast from 'react-hot-toast';
 
 const ManageInstitutions = () => {
