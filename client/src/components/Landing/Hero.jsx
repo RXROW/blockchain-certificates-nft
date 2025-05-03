@@ -4,7 +4,7 @@ import HeroImage from '../../assets/hero.svg';
 
 const Hero = () => {
     return (
-        <div className="bg-gradient-to-br   m-0 relative overflow-hidden">
+        <div className="bg-gradient-to-br   m-0 relative overflow-hidden" id='hero'>
             {/* Grid of small squares background */}
          
             <div className="absolute inset-0 overflow-hidden">
