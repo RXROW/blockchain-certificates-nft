@@ -1,104 +1,44 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import LoadingSpinner from '../../components/Shared/LoadingSpinner';
-import InstitutionsForm from '../../components/Institutions/InstitutionsForm';
+import InstitutionManagement from '../../components/Institutions/InstitutionManagement';
 import toast from 'react-hot-toast';
 
-// Dummy data for institutions
-const DUMMY_INSTITUTIONS = [
-  { id: 1, address: '0x1234567890123456789012345678901234567890', name: 'University of Technology', status: 'active', addedDate: '2023-05-15' },
-  { id: 2, address: '0x2345678901234567890123456789012345678901', name: 'Institute of Science', status: 'active', addedDate: '2023-06-20' },
-  { id: 3, address: '0x3456789012345678901234567890123456789012', name: 'Research Center', status: 'active', addedDate: '2023-07-10' },
-  { id: 4, address: '0x4567890123456789012345678901234567890123', name: 'Technical College', status: 'active', addedDate: '2023-08-05' },
-  { id: 5, address: '0x5678901234567890123456789012345678901234', name: 'Engineering School', status: 'active', addedDate: '2023-09-12' },
-];
-
 const ManageInstitutions = () => {
-  const [institutions, setInstitutions] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
-  const [isAdmin, setIsAdmin] = useState(true); // Set to true for demo purposes
-  const [showConfirmDialog, setShowConfirmDialog] = useState(false);
-  const [institutionToDelete, setInstitutionToDelete] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
-  const [viewMode, setViewMode] = useState('table'); // 'table' or 'grid'
+  const [viewMode, setViewMode] = useState('table');
 
-  useEffect(() => {
-    // Simulate loading data
-    setLoading(true);
-    setTimeout(() => {
-      setInstitutions(DUMMY_INSTITUTIONS);
-      setLoading(false);
-    }, 1000);
-  }, []);
-
-  const handleInstitutionSuccess = (message) => {
-    setSuccess(message);
-    toast.success(message);
-
-    // Simulate adding a new institution
-    const newInstitution = {
-      id: institutions.length + 1,
-      address: message.split(' ')[0], // Extract address from success message
-      name: `New Institution ${institutions.length + 1}`,
-      status: 'active',
-      addedDate: new Date().toISOString().split('T')[0]
-    };
-
-    setInstitutions([...institutions, newInstitution]);
-  };
-
-  const handleInstitutionError = (message) => {
-    setError(message);
-    toast.error(message);
-  };
-
-  const confirmDeleteInstitution = (institution) => {
-    setInstitutionToDelete(institution);
-    setShowConfirmDialog(true);
-  };
-
-  const cancelDelete = () => {
-    setShowConfirmDialog(false);
-    setInstitutionToDelete(null);
-  };
-
-  const deleteInstitution = async () => {
-    if (!institutionToDelete) return;
-
-    try {
-      setLoading(true);
-      setError('');
-      setSuccess('');
-
-      // Simulate API call delay
-      await new Promise(resolve => setTimeout(resolve, 1000));
-
-      // Remove the institution from the list
-      const updatedInstitutions = institutions.filter(
-        inst => inst.id !== institutionToDelete.id
-      );
-      setInstitutions(updatedInstitutions);
-
-      const successMsg = `Institution ${institutionToDelete.name} deleted successfully`;
-      setSuccess(successMsg);
-      toast.success(successMsg);
-    } catch (err) {
-      console.error('Error deleting institution:', err);
-      const errorMsg = err.message || 'Failed to delete institution';
-      setError(errorMsg);
-      toast.error(errorMsg);
-    } finally {
-      setLoading(false);
-      setShowConfirmDialog(false);
-      setInstitutionToDelete(null);
-    }
-  };
+  // Use the updated InstitutionManagement component without redundant toast notifications
+  const {
+    institutions,
+    loading,
+    error,
+    success,
+    newInstitution,
+    institutionName,
+    nameError,
+    transfersAllowed,
+    showConfirmDialog,
+    institutionToDelete,
+    setNewInstitution,
+    setInstitutionName,
+    authorizeInstitution,
+    confirmRevokeInstitution,
+    cancelRevoke,
+    revokeInstitution,
+    toggleTransfersAllowed,
+    validateEthereumAddress,
+    validateInstitutionName
+  } = InstitutionManagement({
+    // Don't show duplicate toasts - InstitutionManagement already handles notifications
+    onSuccess: () => {},
+    onError: () => {}
+  });
 
   // Filter institutions based on search term and status
   const filteredInstitutions = institutions.filter(institution => {
-    const matchesSearch = institution.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    const matchesSearch = 
+      institution.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       institution.address.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesStatus = filterStatus === 'all' || institution.status === filterStatus;
     return matchesSearch && matchesStatus;
@@ -108,34 +48,106 @@ const ManageInstitutions = () => {
     setViewMode(viewMode === 'table' ? 'grid' : 'table');
   };
 
-  if (!isAdmin) {
-    return (
-      <div className="flex items-center justify-center h-[calc(100vh-200px)]">
-        <div className="text-center">
-          <h2 className="text-2xl font-bold text-red-500 mb-4">Access Denied</h2>
-          <p className="text-gray-400">Only administrators can manage institutions.</p>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="max-w-7xl bg-gradient-to-br from-slate-950 to-violet-950 mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <div className="bg-gray-950/20 rounded-lg shadow-xl p-6 border border-gray-700/20">
         <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-6">
           <h2 className="text-2xl font-bold text-white">Manage Institutions</h2>
           <div className="mt-4 md:mt-0 flex items-center space-x-2">
-            <span className="text-gray-400">Demo Mode</span>
-            <span className="px-2 py-1 bg-green-900/50 text-green-300 text-xs rounded-full">Active</span>
+            <span className="text-gray-400">Transfers by Institutions</span>
+            <button
+              onClick={toggleTransfersAllowed}
+              disabled={loading}
+              className={`px-3 py-1 text-xs rounded-full transition-colors duration-200 ${
+                transfersAllowed 
+                  ? 'bg-green-900/50 text-green-300 hover:bg-green-800/50' 
+                  : 'bg-red-900/50 text-red-300 hover:bg-red-800/50'
+              }`}
+            >
+              {transfersAllowed ? 'Enabled' : 'Disabled'}
+            </button>
           </div>
         </div>
 
         {/* Add New Institution */}
-        <div className="mb-8">
-          <InstitutionsForm
-            onSuccess={handleInstitutionSuccess}
-            onError={handleInstitutionError}
-          />
+        <div className="mb-8 bg-gray-900/50 p-6 rounded border border-gray-700">
+          <h3 className="text-lg font-semibold text-white mb-4">Add New Institution</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+            <div className="relative">
+                <label htmlFor="institution-name" className="block text-sm font-medium text-gray-300 mb-1">
+                    Institution Name
+                </label>
+                <input
+                    id="institution-name"
+                    type="text"
+                    value={institutionName}
+                    onChange={(e) => {
+                        setInstitutionName(e.target.value);
+                        if (e.target.value.trim()) {
+                            validateInstitutionName(e.target.value);
+                        }
+                    }}
+                    placeholder="Enter institution name"
+                    className={`w-full px-4 py-2 bg-gray-800 border ${
+                        nameError ? 'border-red-500' : 'border-gray-700'
+                    } rounded text-white placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-violet-500`}
+                />
+                {nameError && (
+                    <p className="mt-1 text-sm text-red-400">{nameError}</p>
+                )}
+            </div>
+            <div className="relative">
+                <label htmlFor="institution-address" className="block text-sm font-medium text-gray-300 mb-1">
+                    Ethereum Address
+                </label>
+                <div className="relative">
+                    <input
+                        id="institution-address"
+                        type="text"
+                        value={newInstitution}
+                        onChange={(e) => setNewInstitution(e.target.value)}
+                        placeholder="Enter institution address"
+                        className={`w-full px-4 py-2 bg-gray-800 border ${
+                          newInstitution && !validateEthereumAddress(newInstitution)
+                            ? 'border-red-500'
+                            : 'border-gray-700'
+                        } rounded text-white placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-violet-500`}
+                    />
+                    {newInstitution && !validateEthereumAddress(newInstitution) && (
+                        <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+                            <svg className="w-5 h-5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                        </div>
+                    )}
+                </div>
+                {newInstitution && !validateEthereumAddress(newInstitution) && (
+                    <p className="mt-1 text-sm text-red-400">Please enter a valid Ethereum address</p>
+                )}
+            </div>
+          </div>
+
+          <div className="flex justify-end">
+            <button
+                onClick={authorizeInstitution}
+                disabled={loading || !newInstitution || !institutionName.trim() || !validateEthereumAddress(newInstitution) || nameError}
+                className="px-6 py-2 bg-violet-600 hover:bg-violet-700 text-white rounded transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
+            >
+                {loading ? (
+                    <>
+                        <LoadingSpinner size="small" />
+                        <span className="ml-2">Adding...</span>
+                    </>
+                ) : (
+                    <>
+                        <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                        </svg>
+                        Add Institution
+                    </>
+                )}
+            </button>
+          </div>
         </div>
 
         {/* Status Messages */}
@@ -175,7 +187,6 @@ const ManageInstitutions = () => {
               <option value="all">All Status</option>
               <option value="active">Active</option>
               <option value="inactive">Inactive</option>
-              <option value="pending">Pending</option>
             </select>
           </div>
           <div className="flex items-center">
@@ -241,7 +252,7 @@ const ManageInstitutions = () => {
                       Status
                     </th>
                     <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
-                      Added Date
+                      Certificates
                     </th>
                     <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-400 uppercase tracking-wider">
                       Actions
@@ -249,8 +260,8 @@ const ManageInstitutions = () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-700">
-                  {filteredInstitutions.map((institution) => (
-                    <tr key={institution.id} className="hover:bg-gray-800/30 transition-colors duration-150">
+                  {filteredInstitutions.map((institution, index) => (
+                    <tr key={index} className="hover:bg-gray-800/30 transition-colors duration-150">
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="flex items-center">
                           <div className="flex-shrink-0 h-10 w-10 bg-violet-900/40 rounded-lg flex items-center justify-center">
@@ -267,24 +278,43 @@ const ManageInstitutions = () => {
                         <div className="text-sm text-gray-300 font-mono">{institution.address}</div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-900/50 text-green-300">
+                        <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                          institution.status === 'active' 
+                            ? 'bg-green-900/50 text-green-300' 
+                            : 'bg-red-900/50 text-red-300'
+                        }`}>
                           {institution.status}
                         </span>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
-                        {institution.addedDate}
+                        {institution.certificateCount}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                        <button
-                          onClick={() => confirmDeleteInstitution(institution)}
-                          disabled={loading}
-                          className="text-red-400 hover:text-red-300 transition-colors duration-200 flex items-center ml-auto"
-                        >
-                          <svg className="w-5 h-5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                          </svg>
-                          Delete
-                        </button>
+                        {institution.isAdmin ? (
+                          <span className="bg-violet-900/30 text-violet-300 px-3 py-1 rounded-full font-medium">
+                            Admin
+                          </span>
+                        ) : institution.isSelf ? (
+                          <span className="bg-blue-900/30 text-blue-300 px-3 py-1 rounded-full font-medium">
+                            Self
+                          </span>
+                        ) : institution.status === 'inactive' ? (
+                          <span className="bg-gray-800/70 text-gray-400 px-3 py-1 rounded-full font-medium">
+                            Already Revoked
+                          </span>
+                        ) : (
+                          <button
+                            onClick={() => confirmRevokeInstitution(institution)}
+                            disabled={loading}
+                            className="text-red-400 hover:text-red-300 transition-colors duration-200 flex items-center ml-auto"
+                            title="Revoke Institution"
+                          >
+                            <svg className="w-5 h-5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                            Revoke
+                          </button>
+                        )}
                       </td>
                     </tr>
                   ))}
@@ -293,8 +323,8 @@ const ManageInstitutions = () => {
             </div>
           ) : (
             <div className="p-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-              {filteredInstitutions.map((institution) => (
-                <div key={institution.id} className="bg-gray-800/30 rounded border border-gray-700/50 p-4 hover:bg-gray-800/50 transition-colors duration-150">
+              {filteredInstitutions.map((institution, index) => (
+                <div key={index} className="bg-gray-800/30 rounded border border-gray-700/50 p-4 hover:bg-gray-800/50 transition-colors duration-150">
                   <div className="flex items-start justify-between">
                     <div className="flex items-center">
                       <div className="bg-violet-900/40 p-2 rounded-lg">
@@ -304,29 +334,48 @@ const ManageInstitutions = () => {
                       </div>
                       <div className="ml-3">
                         <h4 className="text-lg font-medium text-white">{institution.name}</h4>
-                        <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-900/50 text-green-300 mt-1">
+                        <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                          institution.status === 'active' 
+                            ? 'bg-green-900/50 text-green-300' 
+                            : 'bg-red-900/50 text-red-300'
+                        } mt-1`}>
                           {institution.status}
                         </span>
                       </div>
                     </div>
-                    <button
-                      onClick={() => confirmDeleteInstitution(institution)}
-                      disabled={loading}
-                      className="text-red-400 hover:text-red-300 transition-colors duration-200"
-                      title="Delete Institution"
-                    >
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                      </svg>
-                    </button>
+                    {institution.isAdmin ? (
+                      <span className="bg-violet-900/30 text-violet-300 px-3 py-1 rounded-full text-xs font-medium">
+                        Admin
+                      </span>
+                    ) : institution.isSelf ? (
+                      <span className="bg-blue-900/30 text-blue-300 px-3 py-1 rounded-full text-xs font-medium">
+                        Self
+                      </span>
+                    ) : institution.status === 'inactive' ? (
+                      <span className="bg-gray-800/70 text-gray-400 px-3 py-1 rounded-full text-xs font-medium">
+                        Already Revoked
+                      </span>
+                    ) : (
+                      <button
+                        onClick={() => confirmRevokeInstitution(institution)}
+                        disabled={loading}
+                        className="text-red-400 hover:text-red-300 transition-colors duration-200 flex items-center"
+                        title="Revoke Institution"
+                      >
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                        <span className="ml-1 text-xs">Revoke</span>
+                      </button>
+                    )}
                   </div>
                   <div className="mt-4">
                     <div className="text-sm text-gray-400 mb-1">Address:</div>
                     <div className="text-sm text-gray-300 font-mono break-all">{institution.address}</div>
                   </div>
                   <div className="mt-2">
-                    <div className="text-sm text-gray-400 mb-1">Added Date:</div>
-                    <div className="text-sm text-gray-300">{institution.addedDate}</div>
+                    <div className="text-sm text-gray-400 mb-1">Certificates:</div>
+                    <div className="text-sm text-gray-300">{institution.certificateCount}</div>
                   </div>
                 </div>
               ))}
@@ -339,33 +388,34 @@ const ManageInstitutions = () => {
       {showConfirmDialog && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-gray-800 rounded p-6 max-w-md w-full mx-4 border border-gray-700">
-            <h3 className="text-xl font-bold text-white mb-4">Confirm Deletion</h3>
+            <h3 className="text-xl font-bold text-white mb-4">Confirm Revocation</h3>
             <p className="text-gray-300 mb-6">
-              Are you sure you want to delete <span className="font-semibold text-white">{institutionToDelete.name}</span>? This action cannot be undone.
+              Are you sure you want to revoke <span className="font-semibold text-white">{institutionToDelete.name}</span>? 
+              This will remove their ability to issue new certificates.
             </p>
             <div className="flex justify-end space-x-4">
               <button
-                onClick={cancelDelete}
+                onClick={cancelRevoke}
                 className="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded transition-colors duration-200"
               >
                 Cancel
               </button>
               <button
-                onClick={deleteInstitution}
+                onClick={revokeInstitution}
                 disabled={loading}
                 className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
               >
                 {loading ? (
                   <>
                     <LoadingSpinner size="small" />
-                    <span className="ml-2">Deleting...</span>
+                    <span className="ml-2">Revoking...</span>
                   </>
                 ) : (
                   <>
                     <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                     </svg>
-                    Delete Institution
+                    Revoke Institution
                   </>
                 )}
               </button>

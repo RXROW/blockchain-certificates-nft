@@ -4,9 +4,7 @@ import Sidebar from '../Shared/Sidebar';
 
 const DashboardLayout = () => {
     return (
-        <div className="min-h-screen bg-gray-950 mt-7">
-         
-
+        <div className="min-h-screen bg-gray-950 mt-7"> 
             <div className="flex">
                 <div className="flex-none ">
                     <Sidebar />

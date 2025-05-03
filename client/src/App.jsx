@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import LoadingSpinner from './components/Shared/LoadingSpinner';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'; 
 import Navbar from './components/Shared/Navbar';
 import LandingPage from './pages/LandingPage/LandingPage';
 import DashboardLayout from './components/Dashboard/DashboardLayout';
@@ -10,8 +9,7 @@ import VerifyCertificates from './pages/Dashboard/VerifyCertificates';
 import CertificateUpdate from './pages/Dashboard/UpdateCertificate';
 import ManageCourses from './pages/Dashboard/ManageCourses';
 import ManageInstitutions from './pages/Dashboard/ManageInstitutions';
-import Dashboard from './pages/Dashboard/Dashboard';
-import Footer from './components/Shared/Footer';
+import Dashboard from './pages/Dashboard/Dashboard'; 
 import { Toaster } from 'react-hot-toast';
 import "slick-carousel/slick/slick.css";
 import "slick-carousel/slick/slick-theme.css";
@@ -132,7 +130,7 @@ function App() {
                 </div>
 
                 {/* Footer shown on all pages */}
-                <Footer />
+       
                 <Toaster position="top-center" />
             </div>
         </Router>

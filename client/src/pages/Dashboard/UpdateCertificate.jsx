@@ -1,3 +1,4 @@
+ updata-cerifit
 import React from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Formik, Form, Field, ErrorMessage } from 'formik'
@@ -171,3 +172,13 @@ const UpdateCertificate = () => {
 }
 
 export default UpdateCertificate
+ import React from 'react'
+ 
+ const UpdateCertificate = () => {
+   return (
+     <div className='mt-28 text-white'>UpdateCertificate</div>
+   )
+ }
+ 
+ export default UpdateCertificate
+ main
