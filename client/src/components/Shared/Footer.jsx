@@ -1,24 +1,40 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { FaFacebookF, FaTwitter, FaLinkedinIn, FaInstagram } from 'react-icons/fa';
 
 const Footer = () => {
-  // دالة عند الضغط على الزر
+  const [showScrollButton, setShowScrollButton] = useState(false);
+
+  const handleScroll = () => {
+    const hero = document.getElementById('hero');
+    if (hero) {
+      const heroBottom = hero.getBoundingClientRect().bottom; 
+      setShowScrollButton(heroBottom < 0);
+    }
+  };
+
+  useEffect(() => {
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+
   const handleScrollToTop = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   return (
-    <footer className="bg-gradient-to-r from-[#0f1123] via-[#1a133b] to-[#18122b] text-white relative shadow-lg">
-      {/* Footer Links */}
-      <div className="max-w-6xl mx-auto px-4 grid grid-cols-1 md:grid-cols-4 gap-8 pb-8 pt-12">
-        {/* Logo */}
+    <footer className="bg-gradient-to-br from-slate-950 to-violet-950/50 text-white relative shadow-lg">
+      <div className="max-w-6xl mx-auto px-6 grid grid-cols-1 md:grid-cols-4 gap-12 pb-10 pt-14">
         <div className="flex flex-col items-center md:items-start">
-          <span className="text-2xl font-bold tracking-tight mb-2">Certificate<br />NFT<span className="text-blue-400">.</span></span>
+          <span className="text-3xl font-extrabold tracking-tight mb-4 text-center md:text-left">
+            Certificate<br />NFT<span className="text-blue-400">.</span>
+          </span>
+          <p className="text-gray-400 text-sm text-center md:text-left">
+            Empowering digital certificates with blockchain technology.
+          </p>
         </div>
-        {/* Partnerships */}
         <div>
-          <h4 className="font-semibold mb-3 text-blue-200">Our Team Members</h4>
-          <ul className="space-y-2 text-gray-300 text-sm">
+          <h4 className="font-semibold mb-4 text-blue-300">Our Team Members</h4>
+          <ul className="space-y-3 text-gray-300 text-sm">
             <li>Mario Atef</li>
             <li>Eslam Ahmed</li>
             <li>Moaaz Atef</li>
@@ -27,45 +43,47 @@ const Footer = () => {
             <li>Husien Mohsen</li>
           </ul>
         </div>
-        {/* About */}
         <div>
-          <h4 className="font-semibold mb-3 text-blue-200">ABOUT</h4>
-          <ul className="space-y-2 text-gray-300 text-sm">
-            <li><a href="#" className="hover:text-white transition">How It Works</a></li>
-            <li><a href="#" className="hover:text-white transition">Our Features</a></li>
-            <li><a href="#" className="hover:text-white transition">Certificates</a></li>
+          <h4 className="font-semibold mb-4 text-blue-300">About</h4>
+          <ul className="space-y-3 text-gray-300 text-sm">
+            <li><a href="#" className="hover:text-blue-400 transition">How It Works</a></li>
+            <li><a href="#" className="hover:text-blue-400 transition">Our Features</a></li>
+            <li><a href="#" className="hover:text-blue-400 transition">Certificates</a></li>
           </ul>
         </div>
-        {/* Support & Social */}
         <div>
-          <h4 className="font-semibold mb-3 text-blue-200">SUPPORT</h4>
-          <ul className="space-y-2 text-gray-300 text-sm mb-4">
-            <li><a href="#" className="hover:text-white transition">Support Request</a></li>
-            <li><a href="#" className="hover:text-white transition">Contact</a></li>
+          <h4 className="font-semibold mb-4 text-blue-300">Support</h4>
+          <ul className="space-y-3 text-gray-300 text-sm mb-6">
+            <li><a href="#" className="hover:text-blue-400 transition">Support Request</a></li>
+            <li><a href="#" className="hover:text-blue-400 transition">Contact</a></li>
           </ul>
-          <h4 className="font-semibold mb-2 text-blue-200">FOLLOW US</h4>
-          <div className="flex space-x-3">
-            <a href="#" className="text-gray-300 hover:text-white transition"><FaFacebookF /></a>
-            <a href="#" className="text-gray-300 hover:text-white transition"><FaTwitter /></a>
-            <a href="#" className="text-gray-300 hover:text-white transition"><FaLinkedinIn /></a>
-            <a href="#" className="text-gray-300 hover:text-white transition"><FaInstagram /></a>
+          <h4 className="font-semibold mb-3 text-blue-300">Follow Us</h4>
+          <div className="flex space-x-4">
+            <a href="#" className="text-gray-300 hover:text-blue-400 transition text-lg"><FaFacebookF /></a>
+            <a href="#" className="text-gray-300 hover:text-blue-400 transition text-lg"><FaTwitter /></a>
+            <a href="#" className="text-gray-300 hover:text-blue-400 transition text-lg"><FaLinkedinIn /></a>
+            <a href="#" className="text-gray-300 hover:text-blue-400 transition text-lg"><FaInstagram /></a>
           </div>
         </div>
       </div>
+
       {/* Bottom Bar */}
-      <div className="border-t border-white border-opacity-10 py-4 px-4 flex flex-col md:flex-row justify-between items-center max-w-6xl mx-auto text-xs text-gray-400">
+      <div className="border-t border-white border-opacity-10 py-5 px-6 flex flex-col md:flex-row justify-between items-center max-w-6xl mx-auto text-xs text-gray-400">
         <span>©2025 Certificate NFT. All rights reserved.</span>
-        <a href="#" className="hover:text-white transition mt-2 md:mt-0">Privacy Policy</a>
+        <a href="#" className="hover:text-red-400 transition mt-3 md:mt-0">Privacy Policy</a>
       </div>
+
       {/* Floating Scroll to Top Icon */}
-      <div className="fixed bottom-8 right-8 z-50">
-        <button onClick={handleScrollToTop} className="bg-[#7928ca] hover:bg-[#5f1e99] text-white rounded-full p-3 shadow-lg focus:outline-none">
-          <svg width="24" height="24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
-            <path d="M12 19V5" />
-            <polyline points="5 12 12 5 19 12" />
-          </svg>
-        </button>
-      </div>
+      {showScrollButton && (
+        <div className="fixed bottom-8 right-8 z-50">
+          <button onClick={handleScrollToTop} className="bg-violet-500 hover:bg-violet-600 text-white rounded-full p-3 shadow-lg focus:outline-none transition">
+            <svg width="24" height="24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+              <path d="M12 19V5" />
+              <polyline points="5 12 12 5 19 12" />
+            </svg>
+          </button>
+        </div>
+      )}
     </footer>
   );
 };
