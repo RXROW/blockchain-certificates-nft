@@ -1,5 +1,6 @@
 require("@nomicfoundation/hardhat-toolbox");
 require("dotenv").config();
+require("hardhat-contract-sizer"); // ✅ Add this line
 
 const PRIVATE_KEY = process.env.PRIVATE_KEY || "0x0000000000000000000000000000000000000000000000000000000000000000";
 const ETHERSCAN_API_KEY = process.env.ETHERSCAN_API_KEY || "";
@@ -43,5 +44,11 @@ module.exports = {
     apiKey: {
       sepolia: ETHERSCAN_API_KEY
     }
+  },
+  contractSizer: { // ✅ Add this block
+    alphaSort: true,
+    disambiguatePaths: false,
+    runOnCompile: true, // runs automatically when you compile
+    strict: true
   }
 };

@@ -6,6 +6,7 @@ export const fetchAllCertificates = async (
   {
     reset = false,
     isAdmin = false,
+    isInstitute = false,
     maxResults = 100,
     currentPage = 1,
     certificates = [],
@@ -76,6 +77,56 @@ export const fetchAllCertificates = async (
       return;
     }
     
+    // Fast path for institute users when first loading
+    if (isInstitute && institutionFilter && reset) {
+      console.log("Using optimized institute loading path for:", institutionFilter);
+      try {
+        // Get all certificates at once with a specialized contract call
+        // This is much faster than iterating through them all
+        const MAX_BATCH = 100; // Get a reasonable number at once
+        
+        if (typeof contractInstance.getCertificatesByInstitution === 'function') {
+          console.log(`Fetching certificates for institute ${institutionFilter} using contract method`);
+          const certificateIds = await contractInstance.getCertificatesByInstitution(
+            institutionFilter, 
+            0, // Start from the beginning
+            MAX_BATCH // Get a reasonable batch size
+          );
+          
+          console.log(`Found ${certificateIds.length} certificates for institute`);
+          
+          if (certificateIds && certificateIds.length > 0) {
+            // Process the certificates in one batch
+            const processedCerts = await processCertificatesBatch(
+              contractInstance, 
+              certificateIds.map(id => Number(id))
+            );
+            
+            // Sort by newest first (highest ID first)
+            const sortedCerts = processedCerts.sort((a, b) => b.id - a.id);
+            
+            // Update the UI
+            setCertificates(sortedCerts);
+            updateVisibleCertificates(sortedCerts, searchTerm, statusFilter, setVisibleCertificates);
+            setHasMore(certificateIds.length >= MAX_BATCH); // Might be more to load
+            setLastUpdated(Date.now());
+            
+            // Cleanup
+            setLoading(false);
+            setSearchLoading(false);
+            setLoadingMore(false);
+            setIsSearching(false);
+            return;
+          }
+        }
+        // If we get here, the optimized path failed, so fall through to regular loading
+        console.log("Optimized institute loading failed, using standard approach");
+      } catch (error) {
+        console.error("Error in optimized institute loading:", error);
+        // Continue with standard approach
+      }
+    }
+    
     // If all search/filter parameters are clear, show all certificates
     const isShowingAll = !searchTerm && !studentAddressFilter && !institutionFilter && statusFilter === 'all' && !startDate && !endDate;
     
@@ -132,8 +183,8 @@ export const fetchAllCertificates = async (
       return;
     }
     
-    // Admin search-first approach - store search parameters
-    const isAdminSearch = isAdmin && reset;
+    // Admin/Institute search-first approach - store search parameters
+    const isPrivilegedSearch = (isAdmin || isInstitute) && reset;
     // Check if we have a cached starting point
     const startPage = reset ? 1 : currentPage;
     const startIndex = (startPage - 1) * PAGE_SIZE;
@@ -144,7 +195,7 @@ export const fetchAllCertificates = async (
     // Calculate how many tokens to process in this batch
     const remainingToProcess = Math.min(
       Number(totalSupply) - startIndex,
-      isAdminSearch ? Math.min(maxResults, PAGE_SIZE) : PAGE_SIZE
+      isPrivilegedSearch ? Math.min(maxResults, PAGE_SIZE) : PAGE_SIZE
     );
     
     // If no more to process, we're done
@@ -159,8 +210,8 @@ export const fetchAllCertificates = async (
     
     console.log(`Fetching page ${startPage}, processing ${remainingToProcess} certificates from index ${startIndex}`);
     
-    // For admin search, we approach differently - start by gathering potential matches
-    if (isAdminSearch && (searchTerm || studentAddressFilter || institutionFilter || statusFilter !== 'all')) {
+    // For admin/institute search, we approach differently - start by gathering potential matches
+    if (isPrivilegedSearch && (searchTerm || studentAddressFilter || institutionFilter || statusFilter !== 'all')) {
       // If searching by specific ID, try to fetch it directly first
       if (searchTerm && /^\d+$/.test(searchTerm.trim())) {
         try {
@@ -327,7 +378,7 @@ export const fetchAllCertificates = async (
       const batchCertificates = await processCertificatesBatch(contractInstance, batch);
       
       // Filter certificates based on search criteria for standard pagination too
-      const filteredBatch = isAdmin && reset ? 
+      const filteredBatch = isPrivilegedSearch ? 
         batchCertificates.filter(cert => {
           if (!cert) return false;
           
@@ -390,4 +441,118 @@ export const fetchAllCertificates = async (
   }
 };
 
-export const fetchCertificates = fetchAllCertificates;
+export const fetchCertificates = async (
+  contractInstance, 
+  currentAccount,
+  {
+    setCertificates, 
+    setLoading, 
+    setLoadingMore, 
+    setVisibleCertificates,
+    setLastUpdated,
+    setHasMore,
+    setError,
+    updateVisibleCertificates,
+    searchTerm = '',
+    statusFilter = 'all'
+  }
+) => {
+  if (!contractInstance || !currentAccount) return;
+
+  try {
+    // Set appropriate loading state
+    if (typeof setLoading === 'function') {
+      setLoading(true);
+    }
+    
+    if (typeof setError === 'function') {
+      setError('');
+    }
+
+    console.log('Fetching certificates for account:', currentAccount);
+
+    // Get the balance of certificates for this account
+    const balance = await contractInstance.balanceOf(currentAccount);
+    console.log('Certificate balance:', balance.toString());
+
+    if (Number(balance) === 0) {
+      console.log('No certificates found for account');
+      if (typeof setCertificates === 'function') {
+        setCertificates([]);
+      }
+      if (typeof setVisibleCertificates === 'function') {
+        setVisibleCertificates([]);
+      }
+      if (typeof setHasMore === 'function') {
+        setHasMore(false);
+      }
+      return [];
+    }
+
+    const certificateIds = [];
+    
+    // Get all token IDs owned by this account
+    for (let i = 0; i < Number(balance); i++) {
+      try {
+        const tokenId = await contractInstance.tokenOfOwnerByIndex(currentAccount, i);
+        certificateIds.push(Number(tokenId));
+      } catch (err) {
+        console.error(`Error fetching token ID at index ${i}:`, err);
+        continue;
+      }
+    }
+
+    if (certificateIds.length === 0) {
+      console.log('No certificate IDs found');
+      if (typeof setCertificates === 'function') {
+        setCertificates([]);
+      }
+      if (typeof setVisibleCertificates === 'function') {
+        setVisibleCertificates([]);
+      }
+      return [];
+    }
+
+    console.log(`Found ${certificateIds.length} certificate IDs:`, certificateIds);
+    
+    // Process the certificates
+    const processedCerts = await processCertificatesBatch(contractInstance, certificateIds);
+    console.log(`Processed ${processedCerts.length} certificates`);
+
+    // Update state with the processed certificates
+    if (typeof setCertificates === 'function') {
+      setCertificates(processedCerts);
+    }
+    
+    // Update visible certificates if the function is provided
+    if (typeof updateVisibleCertificates === 'function' && typeof setVisibleCertificates === 'function') {
+      updateVisibleCertificates(processedCerts, searchTerm, statusFilter, setVisibleCertificates);
+    }
+    
+    // Update last updated timestamp
+    if (typeof setLastUpdated === 'function') {
+      setLastUpdated(Date.now());
+    }
+    
+    // No more certificates to load
+    if (typeof setHasMore === 'function') {
+      setHasMore(false);
+    }
+
+    return processedCerts;
+  } catch (error) {
+    console.error('Error fetching certificates:', error);
+    if (typeof setError === 'function') {
+      setError('Failed to fetch certificates: ' + error.message);
+    }
+    return [];
+  } finally {
+    // Reset loading states
+    if (typeof setLoading === 'function') {
+      setLoading(false);
+    }
+    if (typeof setLoadingMore === 'function') {
+      setLoadingMore(false);
+    }
+  }
+};

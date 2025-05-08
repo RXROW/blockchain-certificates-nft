@@ -1,29 +1,97 @@
-import React from 'react';
-import { FaEye, FaFileAlt, FaCheck, FaBan } from 'react-icons/fa';
+import React, { useState } from 'react';
+import { Link } from 'react-router-dom';
+import { FaEye, FaFileAlt, FaCheck, FaBan, FaTrash, FaClock, FaExchangeAlt } from 'react-icons/fa';
 import FuturisticSpinner from '../../../components/ui/FuturisticSpinner';
 import { getStatusColor, getStatusText, formatGrade } from '../../../components/sperates/cert_utilits.js';
+import BurnStatusIndicator from '../BurnStatusIndicator';
+import BurningCertificate from './BurningCertificate';
 
 const CertificateGrid = ({
   visibleCertificates,
   selectedCertificates,
   isAdmin,
+  isInstitute,
   toggleCertificateSelection,
   openMetadataModal,
   handleViewImage,
   handleVerifyCertificate,
   verifyLoading,
   openRevokeModal,
-  revokeLoading
+  revokeLoading,
+  openBurnModal,
+  burnTimelock,
+  onBurnAnimationStart,
+  openTransferModal,
+  transfersAllowed
 }) => {
+  // Track which certificates are currently burning
+  const [burningCertificates, setBurningCertificates] = useState({});
+  // Track which certificates should be hidden after burning
+  const [hiddenCertificates, setHiddenCertificates] = useState({});
+  
+  // Handler for when burn animation completes
+  const handleBurnComplete = (certificate) => {
+    console.log(`Burn animation completed for certificate #${certificate.id}`);
+    
+    // Update the burning state to remove this certificate
+    setBurningCertificates(prev => {
+      const updated = { ...prev };
+      delete updated[certificate.id];
+      return updated;
+    });
+    
+    // Mark this certificate as hidden
+    setHiddenCertificates(prev => ({
+      ...prev,
+      [certificate.id]: true
+    }));
+  };
+
+  // Handler for when burn is cancelled
+  const handleBurnCancel = (certificate) => {
+    console.log(`Burn cancelled for certificate #${certificate.id}`);
+    
+    // Update the burning state to remove this certificate
+    setBurningCertificates(prev => {
+      const updated = { ...prev };
+      delete updated[certificate.id];
+      return updated;
+    });
+  };
+  
+  // Function to start burn animation for a certificate
+  const startBurningAnimation = (certificate) => {
+    // Set this certificate as burning
+    setBurningCertificates(prev => ({
+      ...prev,
+      [certificate.id]: true
+    }));
+    
+    console.log(`Starting burn animation for certificate #${certificate.id}`);
+  };
+  
+  // Modified burn handler to include animation for admins
+  const handleBurnWithAnimation = (certificate) => {
+    // Just open the burn modal - animation will start during transaction processing
+    openBurnModal(certificate);
+  };
+
+  // Filter out certificates that have been burned and should be hidden
+  const filteredCertificates = visibleCertificates.filter(cert => !hiddenCertificates[cert.id]);
+
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 p-6">
-      {visibleCertificates.map((certificate) => (
-        <div
+      {filteredCertificates.map((certificate) => (
+        <BurningCertificate
           key={certificate.id}
+          certificate={certificate}
+          isBurning={burningCertificates[certificate.id] || certificate.isBurning}
+          onBurnComplete={handleBurnComplete}
+          onBurnCancel={handleBurnCancel}
           className={`bg-gray-800/80 border border-gray-700 rounded-lg overflow-hidden hover:border-violet-500 transition-all duration-300 shadow-lg ${selectedCertificates.some(c => c.id === certificate.id) ? 'ring-2 ring-violet-500' : ''}`}
         >
-          {isAdmin && (
-            <div className="absolute top-2 left-2">
+          {(isAdmin || isInstitute) && (
+            <div className="p-2">
               <input 
                 type="checkbox" 
                 checked={selectedCertificates.some(c => c.id === certificate.id)}
@@ -43,42 +111,56 @@ const CertificateGrid = ({
               </span>
             </div>
 
-            <div className="space-y-3 mb-6">
-              <p className="text-sm text-gray-400">Certificate ID: {certificate.id}</p>
-              <p className="flex items-center text-sm">
-                <span className="text-gray-400 w-32">Student:</span>
-                <span className="truncate">{certificate.student.substring(0, 10)}...{certificate.student.substring(certificate.student.length - 8)}</span>
+            <div className="space-y-2 mb-4">
+              <p className="text-gray-400">
+                <span className="font-bold">ID:</span> {certificate.id}
               </p>
-              <p className="flex items-center text-sm">
-                <span className="text-gray-400 w-32">Institution:</span>
-                <span className="truncate">{certificate.institution.substring(0, 10)}...{certificate.institution.substring(certificate.institution.length - 8)}</span>
+              <p className="text-gray-400">
+                <span className="font-bold">Student:</span> 
+                <span className="text-white truncate block">{certificate.student.substring(0, 6)}...{certificate.student.substring(38)}</span>
               </p>
-              <div className="flex justify-between items-center mb-2">
-                <span className="text-gray-400 w-32">Completion:</span>
-                <span>{certificate.completionDate}</span>
-              </div>
-              {/* Add UTC date display with proper formatting */}
-              <div className="flex justify-between items-center mb-2 text-xs">
-                <span className="text-gray-500 w-32">UTC Time:</span>
-                <span className="text-gray-500">
-                  {certificate.completionTimestamp 
-                    ? new Date(certificate.completionTimestamp * 1000).toUTCString().split(' ').slice(0, 4).join(' ')
-                    : 'Unknown'}
-                </span>
-              </div>
-              <div className="flex items-center text-sm">
-                <span className="text-gray-400 w-32">Grade:</span>
-                <span className={`font-semibold ${certificate.grade >= 70 ? 'text-green-400' : certificate.grade >= 60 ? 'text-yellow-400' : 'text-red-400'}`}>
-                  {formatGrade(certificate.grade)} ({certificate.grade}%)
-                </span>
-              </div>
-              {certificate.revocationReason && (
-                <p className="flex items-center text-sm">
-                  <span className="text-gray-400 w-32">Revoked:</span>
-                  <span className="text-red-400">{certificate.revocationReason}</span>
-                </p>
-              )}
+              <p className="text-gray-400">
+                <span className="font-bold">Institution:</span> 
+                <span className="text-white truncate block">{certificate.institution.substring(0, 6)}...{certificate.institution.substring(38)}</span>
+              </p>
+              <p className="text-gray-400">
+                <span className="font-bold">Date:</span> {certificate.completionDate}
+              </p>
+              <p className="text-gray-400">
+                <span className="font-bold">Grade:</span> {certificate.grade}% ({formatGrade(certificate.grade)})
+              </p>
             </div>
+            
+            {/* Display burn status if requested or approved */}
+            {(certificate.burnRequested || certificate.burnApproved) && (
+              <div className="mb-4 p-2 border border-amber-500/30 bg-amber-900/20 rounded-md">
+                <div className="flex items-center">
+                  {certificate.burnApproved ? (
+                    <div className="flex items-center text-green-400">
+                      <FaCheck className="mr-2 text-green-400" />
+                      <span className="font-medium">Burn Approved</span>
+                    </div>
+                  ) : (
+                    <div className="flex items-center text-amber-400">
+                      <FaClock className="mr-2 text-amber-400" />
+                      <span className="font-medium">Burn Requested</span>
+                    </div>
+                  )}
+                </div>
+                
+                {certificate.burnRequestTime && !certificate.burnApproved && (
+                  <div className="text-xs text-gray-400 mt-1 ml-5">
+                    Requested: {new Date(certificate.burnRequestTime).toLocaleString()}
+                  </div>
+                )}
+                
+                {certificate.burnReason && (
+                  <div className="text-xs text-gray-400 mt-1 ml-5">
+                    Reason: {certificate.burnReason}
+                  </div>
+                )}
+              </div>
+            )}
 
             <div className="flex flex-wrap gap-2">
               <button
@@ -88,6 +170,7 @@ const CertificateGrid = ({
                 <FaFileAlt className="mr-1" />
                 Metadata
               </button>
+              
               <button
                 onClick={() => handleViewImage(certificate)}
                 className="flex items-center px-3 py-1.5 bg-purple-600 hover:bg-purple-700 rounded-lg transition-colors text-sm"
@@ -96,7 +179,7 @@ const CertificateGrid = ({
                 View
               </button>
 
-              {isAdmin && !certificate.isVerified && !certificate.isRevoked && (
+              {(isAdmin || isInstitute) && !certificate.isVerified && !certificate.isRevoked && (
                 <button
                   onClick={() => handleVerifyCertificate(certificate)}
                   disabled={verifyLoading[certificate.id]}
@@ -113,7 +196,7 @@ const CertificateGrid = ({
                 </button>
               )}
 
-              {isAdmin && !certificate.isRevoked && (
+              {(isAdmin || isInstitute) && !certificate.isRevoked && (
                 <button
                   onClick={() => openRevokeModal(certificate)}
                   disabled={revokeLoading[certificate.id]}
@@ -129,9 +212,30 @@ const CertificateGrid = ({
                   Revoke
                 </button>
               )}
+
+              {(isAdmin || isInstitute) && !certificate.isRevoked && transfersAllowed && (
+                <button
+                  onClick={() => openTransferModal(certificate)}
+                  className="flex items-center px-3 py-1.5 bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors text-sm"
+                >
+                  <FaExchangeAlt className="mr-1" />
+                  Transfer
+                </button>
+              )}
+
+              {!certificate.isRevoked && (isAdmin || isInstitute || certificate.student === window.ethereum?.selectedAddress) && (
+                <button
+                  onClick={() => handleBurnWithAnimation(certificate)}
+                  className="flex items-center px-3 py-1.5 bg-red-600 hover:bg-red-700 rounded-lg transition-colors text-sm"
+                  disabled={burningCertificates[certificate.id]}
+                >
+                  <FaTrash className="mr-1" />
+                  Burn
+                </button>
+              )}
             </div>
           </div>
-        </div>
+        </BurningCertificate>
       ))}
     </div>
   );

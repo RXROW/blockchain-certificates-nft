@@ -11,6 +11,7 @@ const ImageModal = ({
   handleImageError,
   placeholderImage,
   isAdmin,
+  isInstitute,
   handleVerifyCertificate,
   verifyLoading,
   openRevokeModal,
@@ -56,7 +57,7 @@ const ImageModal = ({
           </div>
 
           <div className="flex space-x-3">
-            {isAdmin && !imageCertificate.isVerified && !imageCertificate.isRevoked && (
+            {(isAdmin || isInstitute) && !imageCertificate.isVerified && !imageCertificate.isRevoked && (
               <button
                 onClick={() => handleVerifyCertificate(imageCertificate)}
                 disabled={verifyLoading[imageCertificate.id]}
@@ -71,7 +72,7 @@ const ImageModal = ({
               </button>
             )}
 
-            {isAdmin && !imageCertificate.isRevoked && (
+            {(isAdmin || isInstitute) && !imageCertificate.isRevoked && (
               <button
                 onClick={() => openRevokeModal(imageCertificate)}
                 disabled={revokeLoading[imageCertificate.id]}

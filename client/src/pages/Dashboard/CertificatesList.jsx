@@ -17,6 +17,7 @@ import { useCertificateRecent } from '../../hooks/useCertificateRecent';
 import { useCertificateMetadata } from '../../hooks/useCertificateMetadata';
 import { useCertificateVerification } from '../../hooks/useCertificateVerification';
 import { useCertificateRevocation } from '../../hooks/useCertificateRevocation';
+import { useCertificateBurn } from '../../hooks/useCertificateBurn';
 import { useWalletConnection } from '../../hooks/useWalletConnection';
 import { useCertificateFetching } from '../../hooks/useCertificateFetching';
 import { useContractInitialization } from '../../hooks/useContractInitialization';
@@ -39,6 +40,7 @@ import MetadataModal from '../../components/Certificates/Modals/MetadataModal';
 import ImageModal from '../../components/Certificates/Modals/ImageModal';
 import RevokeModal from '../../components/Certificates/Modals/RevokeModal';
 import BatchActionBar from '../../components/Certificates/Modals/BatchActionBar';
+import BurnModal from '../../components/Certificates/Modals/BurnModal';
 
 const CertificatesList = () => {
   
@@ -80,6 +82,13 @@ const CertificatesList = () => {
   // Add state for selectedCertificate for use with other modals
   const [selectedCertificate, setSelectedCertificate] = useState(null);
   
+  // Add state for batch burn modal
+  const [showBatchBurnModal, setShowBatchBurnModal] = useState(false);
+  const [batchBurnReason, setBatchBurnReason] = useState('');
+  
+  // Add state for burning certificates
+  const [burningCertificates, setBurningCertificates] = useState({});
+  
   // Use the certificate search hook
   const {
     courseIdFilter,
@@ -114,10 +123,8 @@ const CertificatesList = () => {
     maxResults
   );
 
-  // Update visible certificates when filters change
-  useEffect(() => {
-    updateVisibleCertificates(certificates, searchTerm, statusFilter, setVisibleCertificates);
-  }, [certificates, searchTerm, statusFilter, updateVisibleCertificates, setVisibleCertificates]);
+  // Add state for institute role
+  const [isInstitute, setIsInstitute] = useState(false);
 
   // Function to check if user is admin
   const checkAdminStatus = async (contractInstance, currentAccount) => {
@@ -137,7 +144,40 @@ const CertificatesList = () => {
     }
   };
 
-  // Add MetaMask event listeners
+  // Update visible certificates when filters change
+  useEffect(() => {
+    updateVisibleCertificates(certificates, searchTerm, statusFilter, setVisibleCertificates);
+  }, [certificates, searchTerm, statusFilter]);
+
+  // Function to check if user is institute
+  const checkInstituteStatus = async (contractInstance, currentAccount) => {
+    try {
+      if (!contractInstance || !currentAccount) return false;
+
+      // First try the authorizedInstitutions mapping
+      let isInstitute = await contractInstance.authorizedInstitutions(currentAccount);
+      console.log('Is institute account (via authorizedInstitutions):', isInstitute);
+
+      // If that fails, try checking INSTITUTION_ROLE
+      if (!isInstitute) {
+        try {
+          const institutionRole = await contractInstance.INSTITUTION_ROLE();
+          isInstitute = await contractInstance.hasRole(institutionRole, currentAccount);
+          console.log('Is institute account (via hasRole):', isInstitute);
+        } catch (roleError) {
+          console.warn('Error checking INSTITUTION_ROLE:', roleError);
+        }
+      }
+
+      setIsInstitute(isInstitute);
+      return isInstitute;
+    } catch (err) {
+      console.error('Error checking institute status:', err);
+      return false;
+    }
+  };
+
+  // Update MetaMask event listeners to check institute status
   useEffect(() => {
     if (!window.ethereum) return;
 
@@ -152,6 +192,7 @@ const CertificatesList = () => {
         setAccount(newAccount);
         if (contract) {
           await checkAdminStatus(contract, newAccount);
+          await checkInstituteStatus(contract, newAccount);
         }
       }
     };
@@ -167,7 +208,7 @@ const CertificatesList = () => {
       window.ethereum.removeListener('accountsChanged', handleAccountsChanged);
       window.ethereum.removeListener('chainChanged', handleChainChanged);
     };
-  }, [contract, checkAdminStatus]);
+  }, [contract, checkAdminStatus, checkInstituteStatus]);
 
   // Replace the wallet connection functions with the hook, using different names
   const { 
@@ -210,11 +251,20 @@ const CertificatesList = () => {
     setLastUpdated,
     setNoResultsAddress,
     updateVisibleCertificates,
-    setContract
+    setContract,
+    checkInstituteStatus,
+    isInstitute,
+    setIsInstitute
   );
 
   // Inside component, replace the handleCertificateEvent definition with:
-  const { handleCertificateEvent, handleCertificateStatusEvent } = useCertificateEvents(
+  const { 
+    handleCertificateEvent, 
+    handleCertificateStatusEvent,
+    handleCertificateBurnEvent,
+    handleCertificateBurnApprovedEvent,
+    handleCertificateBurnedEvent 
+  } = useCertificateEvents(
     contract,
     certificates,
     totalCertificates,
@@ -225,7 +275,10 @@ const CertificatesList = () => {
     setVisibleCertificates,
     searchTerm,
     statusFilter,
-    MAX_CERTIFICATES
+    MAX_CERTIFICATES,
+    isAdmin,
+    isInstitute,
+    account
   );
 
   // Setup optimized event listeners for real-time updates
@@ -242,7 +295,12 @@ const CertificatesList = () => {
       // NEW: Add listener for status change events
       contract.on('CertificateStatusChanged', handleCertificateStatusEvent);
       
-      // Use a single block listener with throttling for better performance
+      // Add listeners for burn events
+      contract.on('CertificateBurnRequested', handleCertificateBurnEvent);
+      contract.on('CertificateBurnApproved', handleCertificateBurnApprovedEvent);
+      contract.on('CertificateBurned', handleCertificateBurnedEvent);
+      
+      // Monitor block changes for real-time updates
       let lastProcessedBlock = 0;
       
       if (window.ethereum) {
@@ -252,43 +310,121 @@ const CertificatesList = () => {
           if (blockNumber - lastProcessedBlock >= 10) {
             lastProcessedBlock = blockNumber;
             
-            // Check for new certificates rather than refreshing all data
-            const newTotalSupply = await contract.totalSupply().catch(() => 0);
-            
-            if (newTotalSupply > totalCertificates) {
-              console.log(`Block ${blockNumber}: New certificates detected (${newTotalSupply} > ${totalCertificates})`);
-              setTotalCertificates(Number(newTotalSupply));
+            if (isAdmin || isInstitute) {
+              // For admins and institutions, check for new certificates in the contract
+              // Check for new certificates rather than refreshing all data
+              const newTotalSupply = await contract.totalSupply().catch(() => 0);
               
-              // If we have significantly more certificates, trigger an incremental load
-              if (Number(newTotalSupply) - totalCertificates > 5) {
-                fetchAllCertificates(contract, {
-                  reset: true,
-                  isAdmin,
-                  maxResults,
-                  currentPage,
-                  certificates,
-                  loadingMore,
-                  isSearching,
-                  searchTerm,
-                  statusFilter,
-                  studentAddressFilter,
-                  institutionFilter,
-                  startDate,
-                  endDate,
-                  setCurrentPage,
-                  setHasMore,
-                  setLoading,
-                  setSearchLoading,
-                  setCertificates,
-                  setVisibleCertificates,
-                  setLoadingMore,
-                  setIsSearching,
-                  setError,
-                  setTotalCertificates,
-                  setLastUpdated,
-                  setNoResultsAddress,
-                  updateVisibleCertificates
-                });
+              if (newTotalSupply > totalCertificates) {
+                console.log(`Block ${blockNumber}: New certificates detected (${newTotalSupply} > ${totalCertificates})`);
+                setTotalCertificates(Number(newTotalSupply));
+                
+                // If we have significantly more certificates, trigger an incremental load
+                if (Number(newTotalSupply) - totalCertificates > 5) {
+                  fetchAllCertificates(contract, {
+                    reset: true,
+                    isAdmin,
+                    maxResults,
+                    currentPage,
+                    certificates,
+                    loadingMore,
+                    isSearching,
+                    searchTerm,
+                    statusFilter,
+                    studentAddressFilter,
+                    institutionFilter,
+                    startDate,
+                    endDate,
+                    setCurrentPage,
+                    setHasMore,
+                    setLoading,
+                    setSearchLoading,
+                    setCertificates,
+                    setVisibleCertificates,
+                    setLoadingMore,
+                    setIsSearching,
+                    setError,
+                    setTotalCertificates,
+                    setLastUpdated,
+                    setNoResultsAddress,
+                    updateVisibleCertificates
+                  });
+                }
+              }
+            } else if (account) {
+              // For regular users, check if any of their certificates have status changes
+              try {
+                // Get current balance
+                const balance = await contract.balanceOf(account).catch(() => 0);
+                
+                // Check if the user has certificates
+                if (Number(balance) > 0) {
+                  // For performance, we'll verify a subset of certificates
+                  // by batch checking their status
+                  const certificatesToCheck = [];
+                  
+                  // Prefer to check certificates that aren't verified yet
+                  const pendingCerts = certificates.filter(c => !c.isVerified && !c.isRevoked)
+                    .map(c => Number(c.id));
+                  
+                  if (pendingCerts.length > 0) {
+                    // Add up to 5 pending certificates to check
+                    certificatesToCheck.push(...pendingCerts.slice(0, 5));
+                  }
+                  
+                  // Add some random certificates from the user's collection if needed
+                  if (certificatesToCheck.length < 3 && certificates.length > 3) {
+                    const randomCerts = certificates
+                      .filter(c => !certificatesToCheck.includes(Number(c.id)))
+                      .sort(() => 0.5 - Math.random()) // shuffle
+                      .slice(0, 3)
+                      .map(c => Number(c.id));
+                    
+                    certificatesToCheck.push(...randomCerts);
+                  }
+                  
+                  if (certificatesToCheck.length > 0) {
+                    console.log(`Checking status of ${certificatesToCheck.length} certificates for user`);
+                    
+                    // Fetch updated certificate details
+                    const updatedCerts = await processCertificatesBatch(contract, certificatesToCheck);
+                    
+                    let hasChanges = false;
+                    
+                    // Update certificates if status has changed
+                    setCertificates(prev => {
+                      const newCerts = [...prev];
+                      
+                      updatedCerts.forEach(updatedCert => {
+                        const index = newCerts.findIndex(c => c.id === updatedCert.id);
+                        if (index >= 0) {
+                          // Check if status has changed
+                          const oldCert = newCerts[index];
+                          if (oldCert.isVerified !== updatedCert.isVerified || 
+                              oldCert.isRevoked !== updatedCert.isRevoked) {
+                            console.log(`Certificate ${updatedCert.id} status changed: verified=${updatedCert.isVerified}, revoked=${updatedCert.isRevoked}`);
+                            newCerts[index] = {
+                              ...newCerts[index],
+                              isVerified: updatedCert.isVerified,
+                              isRevoked: updatedCert.isRevoked
+                            };
+                            hasChanges = true;
+                          }
+                        }
+                      });
+                      
+                      return hasChanges ? newCerts : prev;
+                    });
+                    
+                    if (hasChanges) {
+                      // Update visible certificates and last updated timestamp
+                      updateVisibleCertificates(certificates, searchTerm, statusFilter, setVisibleCertificates);
+                      setLastUpdated(Date.now());
+                    }
+                  }
+                }
+              } catch (error) {
+                console.error('Error checking certificate status updates:', error);
               }
             }
           }
@@ -305,7 +441,10 @@ const CertificatesList = () => {
         contract.removeAllListeners('CertificateVerified');
         contract.removeAllListeners('CertificateRevoked');
         contract.removeAllListeners('CertificateUpdated');
-        contract.removeAllListeners('CertificateStatusChanged'); // NEW: cleanup for new event
+        contract.removeAllListeners('CertificateStatusChanged');
+        contract.removeAllListeners('CertificateBurnRequested');
+        contract.removeAllListeners('CertificateBurnApproved');
+        contract.removeAllListeners('CertificateBurned');
       }
       
       if (window.ethereum) {
@@ -313,41 +452,44 @@ const CertificatesList = () => {
         provider.removeAllListeners('block');
       }
     };
-  }, [contract, totalCertificates, handleCertificateEvent, fetchAllCertificates]);
-
-  // Add infinite scroll support for large certificate lists
-  const loadMoreCertificates = useCallback(() => {
-    if (!loading && !loadingMore && hasMore && contract) {
-      fetchAllCertificates(contract, {
-        reset: false,
-        isAdmin,
-        maxResults,
-        currentPage,
-        certificates,
-        loadingMore,
-        isSearching,
-        searchTerm,
-        statusFilter,
-        studentAddressFilter,
-        institutionFilter,
-        startDate,
-        endDate,
-        setCurrentPage,
-        setHasMore,
-        setLoading,
-        setSearchLoading,
-        setCertificates,
-        setVisibleCertificates,
-        setLoadingMore,
-        setIsSearching,
-        setError,
-        setTotalCertificates,
-        setLastUpdated,
-        setNoResultsAddress,
-        updateVisibleCertificates
-      });
-    }
-  }, [loading, loadingMore, hasMore, contract, currentPage, certificates, loadingMore, isSearching, searchTerm, statusFilter, studentAddressFilter, institutionFilter, isAdmin, maxResults, startDate, endDate]);
+  }, [
+    contract, 
+    totalCertificates, 
+    handleCertificateEvent, 
+    handleCertificateStatusEvent,
+    handleCertificateBurnEvent,
+    handleCertificateBurnApprovedEvent,
+    handleCertificateBurnedEvent,
+    isAdmin,
+    isInstitute,
+    account,
+    certificates,
+    searchTerm,
+    statusFilter,
+    updateVisibleCertificates,
+    setVisibleCertificates,
+    setLastUpdated,
+    processCertificatesBatch,
+    fetchAllCertificates,
+    maxResults,
+    currentPage,
+    loadingMore,
+    isSearching,
+    studentAddressFilter,
+    institutionFilter,
+    startDate,
+    endDate,
+    setCurrentPage,
+    setHasMore,
+    setLoading,
+    setSearchLoading,
+    setCertificates,
+    setLoadingMore,
+    setIsSearching,
+    setError,
+    setTotalCertificates,
+    setNoResultsAddress
+  ]);
 
   // NEW: Function to fetch recent certificates
   const { fetchRecentCertificates } = useCertificateRecent(
@@ -360,7 +502,10 @@ const CertificatesList = () => {
     setHasMore,
     setLastUpdated,
     searchTerm,
-    statusFilter
+    statusFilter,
+    isInstitute && !isAdmin, // Only use institute filtering if not an admin
+    account,
+    isAdmin // Pass isAdmin to ensure it's prioritized
   );
 
   // Remove the loadMetadataForCertificate function and replace with the hook
@@ -550,12 +695,187 @@ const CertificatesList = () => {
     setRevocationReason('');
   }, []);
 
+  // Add the batch burn request functionality to the existing useCertificateBurn hook
+  const {
+    burnLoading,
+    showBurnModal,
+    burnReason,
+    burnTimelock,
+    setBurnReason,
+    requestBurnCertificate,
+    requestBurnMultipleCertificates,
+    approveBurnCertificate,
+    burnCertificate,
+    openBurnModal,
+    closeBurnModal,
+    cancelBurnRequest
+  } = useCertificateBurn(
+    contract,
+    setCertificates,
+    setSelectedCertificate
+  );
+
+  // Function to handle batch burn request
+  const handleBatchBurnRequest = useCallback(async () => {
+    if (!contract || selectedCertificates.length === 0 || !batchBurnReason.trim()) {
+      return;
+    }
+    
+    try {
+      // Extract IDs from selected certificates
+      const certificateIds = selectedCertificates.map(cert => cert.id);
+      
+      // Call the hook function
+      await requestBurnMultipleCertificates(certificateIds, batchBurnReason);
+      
+      // Clear selection and close modal
+      setSelectedCertificates([]);
+      setShowBatchBurnModal(false);
+      setBatchBurnReason('');
+      
+      // Show success message (you could add toasts or other notifications here)
+      console.log(`Burn requests submitted for ${certificateIds.length} certificates`);
+      
+    } catch (error) {
+      console.error('Error during batch burn request:', error);
+      setError(`Batch burn request failed: ${error.message}`);
+    }
+  }, [contract, selectedCertificates, batchBurnReason, requestBurnMultipleCertificates, setError]);
+
   // Update the closeAllModals function
   const closeAllModals = useCallback(() => {
     closeMetadataModal();
     closeImageModal();
     closeRevokeModal();
-  }, [closeMetadataModal, closeImageModal, closeRevokeModal]);
+    closeBurnModal();
+  }, [closeMetadataModal, closeImageModal, closeRevokeModal, closeBurnModal]);
+
+  // Add infinite scroll support for large certificate lists
+  const loadMoreCertificates = useCallback(() => {
+    if (!loading && !loadingMore && hasMore && contract) {
+      // For institute users, use institute-specific paging
+      if (isInstitute && !isAdmin) {
+        setLoadingMore(true);
+        console.log(`Loading more institute certificates from page ${currentPage}`);
+        
+        // Calculate start index for pagination
+        const startIndex = currentPage * 20; // 20 per page
+        
+        // Use the specialized method for institutes with appropriate paging
+        if (typeof contract.getCertificatesByInstitution === 'function') {
+          (async () => {
+            try {
+              const instituteCertIds = await contract.getCertificatesByInstitution(
+                account,
+                startIndex,
+                20 // Fetch 20 at a time
+              );
+              
+              console.log(`Loaded ${instituteCertIds.length} more institute certificates`);
+              
+              if (instituteCertIds && instituteCertIds.length > 0) {
+                // Process the certificates
+                const newCerts = await processCertificatesBatch(contract, instituteCertIds.map(id => Number(id)));
+                
+                // Combine with existing certificates
+                const updatedCerts = [...certificates, ...newCerts];
+                
+                // Update state
+                setCertificates(updatedCerts);
+                updateVisibleCertificates(updatedCerts, searchTerm, statusFilter, setVisibleCertificates);
+                setCurrentPage(currentPage + 1);
+                setHasMore(instituteCertIds.length >= 20); // More to load if we got a full page
+                setLastUpdated(Date.now());
+              } else {
+                // No more certificates
+                setHasMore(false);
+              }
+            } catch (err) {
+              console.error('Error loading more institute certificates:', err);
+              setError('Failed to load more certificates');
+            } finally {
+              setLoadingMore(false);
+            }
+          })();
+        } else {
+          // Fallback to standard loading if specialized method not available
+          fetchAllCertificates(contract, {
+            reset: false,
+            isAdmin: false,
+            isInstitute: true, 
+            maxResults,
+            currentPage,
+            certificates,
+            loadingMore,
+            isSearching,
+            searchTerm,
+            statusFilter,
+            studentAddressFilter,
+            institutionFilter: account,
+            startDate,
+            endDate,
+            setCurrentPage,
+            setHasMore,
+            setLoading,
+            setSearchLoading,
+            setCertificates,
+            setVisibleCertificates,
+            setLoadingMore,
+            setIsSearching,
+            setError,
+            setTotalCertificates,
+            setLastUpdated,
+            setNoResultsAddress,
+            updateVisibleCertificates
+          });
+        }
+      } else {
+        // Admin users and regular users use standard approach
+        fetchAllCertificates(contract, {
+          reset: false,
+          isAdmin,
+          isInstitute: false,
+          maxResults,
+          currentPage,
+          certificates,
+          loadingMore,
+          isSearching,
+          searchTerm,
+          statusFilter,
+          studentAddressFilter,
+          institutionFilter: isAdmin ? institutionFilter : '',
+          startDate,
+          endDate,
+          setCurrentPage,
+          setHasMore,
+          setLoading,
+          setSearchLoading,
+          setCertificates,
+          setVisibleCertificates,
+          setLoadingMore,
+          setIsSearching,
+          setError,
+          setTotalCertificates,
+          setLastUpdated,
+          setNoResultsAddress,
+          updateVisibleCertificates
+        });
+      }
+    }
+  }, [loading, loadingMore, hasMore, contract, currentPage, certificates, isSearching, searchTerm, statusFilter, studentAddressFilter, institutionFilter, isAdmin, isInstitute, account, maxResults, startDate, endDate]);
+
+  // Add this function to start the burn animation
+  const startBurnAnimation = useCallback((certificate) => {
+    console.log(`Start burn animation for certificate #${certificate.id}`);
+    
+    // Add a small delay to ensure the modal is closed first
+    setTimeout(() => {
+      setBurningCertificates(prev => ({
+        ...prev,
+        [certificate.id]: true
+      }));
+    }, 100);
+  }, []);
 
   // Update the modal rendering section
   return (
@@ -564,7 +884,7 @@ const CertificatesList = () => {
         <div className="flex justify-between items-center mb-8">
           <div>
             <h2 className="text-3xl font-bold">
-              {isAdmin ? "Certificate Management" : "My Certificates"}
+              {isAdmin ? "Certificate Management" : isInstitute ? "Institute Certificates" : "My Certificates"}
             </h2>
             {lastUpdated && (
               <p className="text-gray-400 text-sm">
@@ -583,13 +903,15 @@ const CertificatesList = () => {
           lastUpdated={lastUpdated}
           isLoading={loading}
           onFetchRecent={fetchRecentCertificates}
+          isAdmin={isAdmin}
+          isInstitute={isInstitute}
         />
 
         {/* Replace error display with new component */}
         <ErrorDisplay error={error} />
 
         {/* Admin search bar - only show for admins */}
-        {isAdmin && (
+        {(isAdmin || isInstitute) && (
           <AdminSearchPanel 
             searchTerm={searchTerm}
             setSearchTerm={setSearchTerm}
@@ -621,7 +943,7 @@ const CertificatesList = () => {
         )}
 
         {/* Regular user search bar - only show for non-admins */}
-        {!isAdmin && (
+        {!isAdmin && !isInstitute && (
           <UserSearchPanel
             searchTerm={searchTerm}
             setSearchTerm={setSearchTerm}
@@ -666,6 +988,7 @@ const CertificatesList = () => {
                   visibleCertificates={visibleCertificates}
                   selectedCertificates={selectedCertificates}
                   isAdmin={isAdmin}
+                  isInstitute={isInstitute}
                   toggleCertificateSelection={toggleCertificateSelection}
                   openMetadataModal={openMetadataModal}
                   handleViewImage={handleViewImage}
@@ -673,12 +996,16 @@ const CertificatesList = () => {
                   verifyLoading={verifyLoading}
                   openRevokeModal={openRevokeModal}
                   revokeLoading={revokeLoading}
+                  openBurnModal={openBurnModal}
+                  burnTimelock={burnTimelock}
+                  onBurnAnimationStart={startBurnAnimation}
                 />
               ) : (
                 <CertificateTable 
                   visibleCertificates={visibleCertificates}
                   selectedCertificates={selectedCertificates}
                   isAdmin={isAdmin}
+                  isInstitute={isInstitute}
                   toggleCertificateSelection={toggleCertificateSelection}
                   selectAllVisible={selectAllVisible}
                   clearSelection={clearSelection}
@@ -688,6 +1015,9 @@ const CertificatesList = () => {
                   verifyLoading={verifyLoading}
                   openRevokeModal={openRevokeModal}
                   revokeLoading={revokeLoading}
+                  openBurnModal={openBurnModal}
+                  burnTimelock={burnTimelock}
+                  onBurnAnimationStart={startBurnAnimation}
                 />
               )}
               
@@ -720,6 +1050,7 @@ const CertificatesList = () => {
         handleImageError={handleImageError}
         placeholderImage={placeholderImage}
         isAdmin={isAdmin}
+        isInstitute={isInstitute}
         handleVerifyCertificate={handleVerifyCertificate}
         verifyLoading={verifyLoading}
         openRevokeModal={openRevokeModal}
@@ -737,13 +1068,79 @@ const CertificatesList = () => {
         revokeLoading={revokeLoading}
       />
 
-      {/* Replace the batch action bar with the new component */}
-      <BatchActionBar
-        selectedCertificates={selectedCertificates}
-        clearSelection={clearSelection}
-        bulkVerifyCertificates={bulkVerifyCertificates}
-        bulkActionLoading={bulkActionLoading}
+      {/* Modify the BatchActionBar component to include the burn request button */}
+      {selectedCertificates.length > 0 && (
+        <BatchActionBar
+          selectedCertificates={selectedCertificates}
+          clearSelection={() => setSelectedCertificates([])}
+          bulkVerifyCertificates={bulkVerifyCertificates}
+          bulkActionLoading={bulkActionLoading}
+          onRequestBurnClick={() => setShowBatchBurnModal(true)} 
+          isInstitute={isInstitute}
+        />
+      )}
+
+      {/* Add batch burn request modal */}
+      {showBatchBurnModal && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
+          <div className="bg-gray-800 border border-gray-700 rounded-lg p-6 max-w-md w-full">
+            <h3 className="text-xl font-semibold text-white mb-4">Request Burn for Multiple Certificates</h3>
+            
+            <p className="text-gray-300 mb-4">
+              You are about to request burn for {selectedCertificates.length} certificate(s).
+              Please provide a reason for this request.
+            </p>
+            
+            <div className="mb-4">
+              <label className="block text-gray-300 mb-2">Reason for burn request</label>
+              <textarea
+                className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white"
+                rows="3"
+                value={batchBurnReason}
+                onChange={(e) => setBatchBurnReason(e.target.value)}
+                placeholder="Enter reason for burn request..."
+              ></textarea>
+            </div>
+            
+            <div className="flex justify-end gap-3">
+              <button
+                className="px-4 py-2 bg-gray-700 text-white rounded-md hover:bg-gray-600"
+                onClick={() => {
+                  setShowBatchBurnModal(false);
+                  setBatchBurnReason('');
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                className={`px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 disabled:opacity-50`}
+                disabled={!batchBurnReason.trim() || burnLoading}
+                onClick={handleBatchBurnRequest}
+              >
+                {burnLoading ? 'Processing...' : 'Submit Burn Request'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* Add the burn modal */}
+      <BurnModal
+        showBurnModal={showBurnModal}
+        selectedCertificate={selectedCertificate}
+        burnReason={burnReason}
+        setBurnReason={setBurnReason}
+        burnTimelock={burnTimelock}
+        closeBurnModal={closeBurnModal}
+        handleBurnRequest={requestBurnCertificate}
+        handleCancelRequest={cancelBurnRequest}
+        burnLoading={burnLoading}
+        canDirectBurn={isAdmin}
+        handleDirectBurn={burnCertificate}
+        isInstitute={isInstitute}
+        onBurnAnimationStart={startBurnAnimation}
       />
+
     </div>
   );
 };

@@ -17,7 +17,6 @@ const ManageInstitutions = () => {
     newInstitution,
     institutionName,
     nameError,
-    transfersAllowed,
     showConfirmDialog,
     institutionToDelete,
     setNewInstitution,
@@ -26,7 +25,6 @@ const ManageInstitutions = () => {
     confirmRevokeInstitution,
     cancelRevoke,
     revokeInstitution,
-    toggleTransfersAllowed,
     validateEthereumAddress,
     validateInstitutionName
   } = InstitutionManagement({
@@ -53,20 +51,6 @@ const ManageInstitutions = () => {
       <div className="bg-gray-950/20 rounded-lg shadow-xl p-6 border border-gray-700/20">
         <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-6">
           <h2 className="text-2xl font-bold text-white">Manage Institutions</h2>
-          <div className="mt-4 md:mt-0 flex items-center space-x-2">
-            <span className="text-gray-400">Transfers by Institutions</span>
-            <button
-              onClick={toggleTransfersAllowed}
-              disabled={loading}
-              className={`px-3 py-1 text-xs rounded-full transition-colors duration-200 ${
-                transfersAllowed 
-                  ? 'bg-green-900/50 text-green-300 hover:bg-green-800/50' 
-                  : 'bg-red-900/50 text-red-300 hover:bg-red-800/50'
-              }`}
-            >
-              {transfersAllowed ? 'Enabled' : 'Disabled'}
-            </button>
-          </div>
         </div>
 
         {/* Add New Institution */}

@@ -13,7 +13,6 @@ const InstitutionManagement = ({ onSuccess, onError }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-  const [transfersAllowed, setTransfersAllowed] = useState(false);
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const [institutionToDelete, setInstitutionToDelete] = useState(null);
   const [currentUserAddress, setCurrentUserAddress] = useState('');
@@ -27,7 +26,6 @@ const InstitutionManagement = ({ onSuccess, onError }) => {
   useEffect(() => {
     loadCurrentUserInfo();
     loadInstitutions();
-    checkTransfersAllowed();
   }, []);
 
   const validateEthereumAddress = (address) => {
@@ -133,22 +131,6 @@ const InstitutionManagement = ({ onSuccess, onError }) => {
       if (onError) onError('Failed to load institutions');
       toast.error('Failed to load institutions');
       setLoading(false);
-    }
-  };
-
-  const checkTransfersAllowed = async () => {
-    try {
-      const provider = new ethers.BrowserProvider(window.ethereum);
-      const contract = new ethers.Contract(
-        contractAddress.SoulboundCertificateNFT,
-        contractABI.SoulboundCertificateNFT,
-        provider
-      );
-
-      const allowed = await contract.transfersAllowedByInstitution();
-      setTransfersAllowed(allowed);
-    } catch (err) {
-      console.error('Error checking transfer status:', err);
     }
   };
 
@@ -331,39 +313,6 @@ const InstitutionManagement = ({ onSuccess, onError }) => {
     }
   };
 
-  const toggleTransfersAllowed = async () => {
-    try {
-      setLoading(true);
-      setError('');
-      setSuccess('');
-
-      const provider = new ethers.BrowserProvider(window.ethereum);
-      const signer = await provider.getSigner();
-      const contract = new ethers.Contract(
-        contractAddress.SoulboundCertificateNFT,
-        contractABI.SoulboundCertificateNFT,
-        signer
-      );
-
-      const tx = await contract.setInstitutionTransfersAllowed(!transfersAllowed);
-      await tx.wait();
-
-      setTransfersAllowed(!transfersAllowed);
-      const successMsg = `Institution transfers ${!transfersAllowed ? 'enabled' : 'disabled'} successfully`;
-      setSuccess(successMsg);
-      if (onSuccess) onSuccess(successMsg);
-      toast.success(successMsg);
-    } catch (err) {
-      console.error('Error toggling transfers allowed:', err);
-      const errorMsg = err.message || 'Failed to toggle transfer settings';
-      setError(errorMsg);
-      if (onError) onError(errorMsg);
-      toast.error(errorMsg);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   return {
     institutions: institutionDetails,
     loading,
@@ -372,7 +321,6 @@ const InstitutionManagement = ({ onSuccess, onError }) => {
     newInstitution,
     institutionName,
     nameError,
-    transfersAllowed,
     showConfirmDialog,
     institutionToDelete,
     currentUserAddress,
@@ -383,7 +331,6 @@ const InstitutionManagement = ({ onSuccess, onError }) => {
     confirmRevokeInstitution,
     cancelRevoke,
     revokeInstitution,
-    toggleTransfersAllowed,
     validateEthereumAddress,
     validateInstitutionName
   };

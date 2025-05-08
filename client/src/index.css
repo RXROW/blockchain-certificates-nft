@@ -298,4 +298,48 @@ body {
   .translate-z-8 {
     transform: translateZ(8px);
   }
+  
+  /* Animation for fade in */
+  .animate-fade-in {
+    animation: fadeIn 0.4s ease-in-out forwards;
+  }
+  
+  /* Animation for fade in with slide up */
+  .animate-fade-in-slide-up {
+    animation: fadeInSlideUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  }
+  
+  /* Animation for pulse glow */
+  .animate-pulse-glow {
+    animation: pulseGlow 2s infinite;
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes fadeInSlideUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes pulseGlow {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.3);
+  }
+  50% {
+    box-shadow: 0 0 20px 5px rgba(59, 130, 246, 0.5);
+  }
 }

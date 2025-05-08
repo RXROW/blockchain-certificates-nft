@@ -6,6 +6,7 @@ import { getStatusColor, getStatusText, formatGrade } from '../../../components/
 const CertificateTableRow = ({
   certificate,
   isAdmin,
+  isInstitute,
   selectedCertificates,
   toggleCertificateSelection,
   openMetadataModal,
@@ -17,7 +18,7 @@ const CertificateTableRow = ({
 }) => {
   return (
     <tr className="border-t border-gray-700 hover:bg-gray-700/50">
-      {isAdmin && (
+      {(isAdmin || isInstitute) && (
         <td className="px-4 py-3">
           <input 
             type="checkbox" 
@@ -66,7 +67,7 @@ const CertificateTableRow = ({
             <FaEye />
           </button>
 
-          {isAdmin && !certificate.isVerified && !certificate.isRevoked && (
+          {(isAdmin || isInstitute) && !certificate.isVerified && !certificate.isRevoked && (
             <button
               onClick={() => handleVerifyCertificate(certificate)}
               disabled={verifyLoading[certificate.id]}
@@ -81,7 +82,7 @@ const CertificateTableRow = ({
             </button>
           )}
 
-          {isAdmin && !certificate.isRevoked && (
+          {(isAdmin || isInstitute) && !certificate.isRevoked && (
             <button
               onClick={() => openRevokeModal(certificate)}
               disabled={revokeLoading[certificate.id]}

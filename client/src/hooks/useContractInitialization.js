@@ -4,6 +4,7 @@ import contractAddress from '../config/contractAddress.json';
 import contractABI from '../config/abi.json';
 import { fetchAllCertificates } from '../components/sperates/cert_fetch.js';
 import { fetchCertificates } from '../components/sperates/cert_fetch.js';
+import { processCertificatesBatch } from '../components/sperates/cert_utilits.js';
 
 export const useContractInitialization = (
   connectWalletHelper,
@@ -33,7 +34,10 @@ export const useContractInitialization = (
   setLastUpdated,
   setNoResultsAddress,
   updateVisibleCertificates,
-  setContract
+  setContract,
+  checkInstituteStatus,
+  isInstitute,
+  setIsInstitute
 ) => {
   const [isInitialized, setIsInitialized] = useState(false);
   const [error, setErrorState] = useState(null);
@@ -257,7 +261,11 @@ export const useContractInitialization = (
         console.log('Checking admin status...');
         const adminStatus = await checkAdminStatus(contractInstance, connectedAccount);
 
-        // Fetch appropriate certificates based on admin status
+        // Check if the account is an institute
+        console.log('Checking institute status...');
+        const isInstituteUser = await checkInstituteStatus(contractInstance, connectedAccount);
+
+        // Fetch appropriate certificates based on role
         console.log('Contract initialized, fetching certificates...');
         if (adminStatus) {
           // Admin users see all certificates
@@ -289,9 +297,126 @@ export const useContractInitialization = (
             setNoResultsAddress,
             updateVisibleCertificates
           });
+        } else if (isInstituteUser) {
+          // Institute users - use the same optimized loading as admin but filter to their address
+          console.log('Loading certificates for institute with optimized approach:', connectedAccount);
+          
+          // First, get the total count of certificates for this institute (if available)
+          let totalInstituteCount = 0;
+          try {
+            if (typeof contractInstance.countCertificatesByInstitution === 'function') {
+              totalInstituteCount = await contractInstance.countCertificatesByInstitution(connectedAccount);
+              console.log(`Total certificates for institute: ${Number(totalInstituteCount)}`);
+            }
+          } catch (error) {
+            console.warn('Could not get institute certificate count:', error);
+          }
+          
+          // Get the total supply count for display (same as admin view)
+          try {
+            const totalSupply = await contractInstance.totalSupply();
+            setTotalCertificates(Number(totalSupply));
+            console.log(`Setting total certificates display to global count: ${Number(totalSupply)}`);
+          } catch (error) {
+            console.warn('Could not get total supply:', error);
+          }
+          
+          // Batch size for institute loading
+          const INSTITUTE_BATCH_SIZE = 20;
+          
+          // Use specialized method for institute certificates
+          if (typeof contractInstance.getCertificatesByInstitution === 'function') {
+            try {
+              const certificateIds = await contractInstance.getCertificatesByInstitution(
+                connectedAccount,
+                0, // Start from the beginning
+                INSTITUTE_BATCH_SIZE // Get first batch
+              );
+              
+              console.log(`Found ${certificateIds.length} certificates for institute`);
+              
+              if (certificateIds && certificateIds.length > 0) {
+                // Process the certificates
+                const processedCerts = await processCertificatesBatch(
+                  contractInstance, 
+                  certificateIds.map(id => Number(id))
+                );
+                
+                // Sort by newest first (highest ID first)
+                const sortedCerts = processedCerts.sort((a, b) => b.id - a.id);
+                
+                // Update the UI
+                setCertificates(sortedCerts);
+                updateVisibleCertificates(sortedCerts, searchTerm, statusFilter, setVisibleCertificates);
+                
+                // Set pagination info
+                setCurrentPage(1);  // We loaded the first page
+                
+                // Check if there are more certificates to load
+                const hasMoreCerts = (totalInstituteCount > 0) 
+                  ? certificateIds.length < Number(totalInstituteCount)  // Use count if available
+                  : certificateIds.length >= INSTITUTE_BATCH_SIZE;      // Otherwise check if we got a full batch
+                  
+                setHasMore(hasMoreCerts);
+                console.log(`Setting hasMore = ${hasMoreCerts} for institute certificates`);
+                
+                setLastUpdated(Date.now());
+                setLoading(false);
+                setLoadingMore(false);
+                setIsSearching(false);
+                
+                return;
+              }
+            } catch (error) {
+              console.error('Error loading institute certificates:', error);
+              // Continue with fallback method
+            }
+          }
+          
+          // Use the fetchAllCertificates function as fallback
+          await fetchAllCertificates(contractInstance, {
+            reset: true,
+            isAdmin: false,
+            isInstitute: true,
+            maxResults,
+            currentPage,
+            certificates,
+            loadingMore,
+            isSearching: false,
+            searchTerm: '',
+            statusFilter: 'all',
+            studentAddressFilter: '', 
+            institutionFilter: connectedAccount, // Filter to only show this institute's certificates
+            startDate,
+            endDate,
+            setCurrentPage,
+            setHasMore,
+            setLoading,
+            setSearchLoading,
+            setCertificates,
+            setVisibleCertificates,
+            setLoadingMore,
+            setIsSearching,
+            setError,
+            setTotalCertificates,
+            setLastUpdated,
+            setNoResultsAddress,
+            updateVisibleCertificates
+          });
         } else {
           // Regular users see only their certificates
-          await fetchCertificates(contractInstance, connectedAccount);
+          await fetchCertificates(contractInstance, connectedAccount, {
+            setCertificates,
+            setLoading,
+            setLoadingMore,
+            setVisibleCertificates,
+            setLastUpdated,
+            setHasMore,
+            setError,
+            updateVisibleCertificates,
+            searchTerm,
+            statusFilter
+          });
         }
 
         setIsInitialized(true);

@@ -38,8 +38,11 @@ contract CertificateNFTBase is ERC721URIStorage, ERC721Enumerable, Ownable, Acce
     mapping(uint256 => bool) public verifiedCertificates;
     mapping(uint256 => string) public courseNames;  // Course ID to name mapping
     
-    // Transfer control for Soulbound functionality
-    bool public transfersAllowedByInstitution;   // Global transfer control for institutions only
+    // Error for transfer attempts
+    error SoulboundTokenCannotBeTransferred(uint256 tokenId);
+    // New custom errors
+    error CallerNotInstitution(address caller);
+    error CallerNotInstructor(address caller);
     
     // Core events
     event CertificateIssued(
@@ -78,22 +81,28 @@ contract CertificateNFTBase is ERC721URIStorage, ERC721Enumerable, Ownable, Acce
 
     event InstitutionAuthorized(address indexed institution);
     event InstitutionRevoked(address indexed institution);
-    event TransferStatusChanged(bool enabled);
 
     constructor() ERC721("SoulboundAcademicCertificate", "SACERT") Ownable(msg.sender) {
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
         _grantRole(INSTITUTION_ROLE, msg.sender);
-        transfersAllowedByInstitution = false; // Disable transfers by default (Soulbound)
     }
 
     // Modifiers
     modifier onlyInstitution() {
-        require(hasRole(INSTITUTION_ROLE, msg.sender), "Caller is not an institution");
+        // Cache role check result to save gas
+        bool hasInstitutionRole = hasRole(INSTITUTION_ROLE, msg.sender);
+        if (!hasInstitutionRole) {
+            revert CallerNotInstitution(msg.sender);
+        }
         _;
     }
 
     modifier onlyInstructor() {
-        require(hasRole(INSTRUCTOR_ROLE, msg.sender), "Caller is not an instructor");
+        // Cache role check result to save gas
+        bool hasInstructorRole = hasRole(INSTRUCTOR_ROLE, msg.sender);
+        if (!hasInstructorRole) {
+            revert CallerNotInstructor(msg.sender);
+        }
         _;
     }
 
@@ -105,21 +114,15 @@ contract CertificateNFTBase is ERC721URIStorage, ERC721Enumerable, Ownable, Acce
     {
         address from = _ownerOf(tokenId);
         
-        // Implements Soulbound behavior:
+        // Implements strict Soulbound behavior:
         // 1. Allow minting (when from is zero address)
         // 2. Allow burning (when to is zero address)
-        // 3. Allow institutional transfers if explicitly enabled
-        // 4. Disallow all other transfers
+        // 3. Disallow ALL transfers (when both from and to are non-zero)
         
         if (from != address(0) && to != address(0)) {
             // This is a transfer (not minting or burning)
-            
-            // Only allow transfers by institutions when explicitly enabled
-            require(hasRole(INSTITUTION_ROLE, auth) && transfersAllowedByInstitution, 
-                "Certificate is Soulbound: transfers not allowed");
-            
-            // Update the student address when transferring
-            academicCertificates[tokenId].studentAddress = to;
+            // All transfers are prohibited for soulbound tokens
+            revert SoulboundTokenCannotBeTransferred(tokenId);
         }
         
         return super._update(to, tokenId, auth);
@@ -153,11 +156,5 @@ contract CertificateNFTBase is ERC721URIStorage, ERC721Enumerable, Ownable, Acce
     // Helper function - used by multiple contracts
     function tokenExists(uint256 tokenId) public view returns (bool) {
         return _ownerOf(tokenId) != address(0);
-    }
-    
-    // Function to enable/disable institutional transfers (admin only)
-    function setInstitutionTransfersAllowed(bool _enabled) public onlyOwner {
-        transfersAllowedByInstitution = _enabled;
-        emit TransferStatusChanged(_enabled);
     }
 } 

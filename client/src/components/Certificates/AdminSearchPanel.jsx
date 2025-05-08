@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import FuturisticSpinner from '../../components/ui/FuturisticSpinner';
 import DateRangeFilter from './DateRangeFilter';
 
@@ -11,12 +11,9 @@ const AdminSearchPanel = ({
   setInstitutionFilter,
   statusFilter,
   setStatusFilter,
-  searchLoading,
-  loading,
   setNoResultsAddress,
   normalizeAddress,
   setError,
-  setSearchLoading,
   setCurrentPage,
   contract,
   handleSearch,
@@ -30,33 +27,27 @@ const AdminSearchPanel = ({
   setShowDateFilter,
   courseNameFilter
 }) => {
+  const [localLoading, setLocalLoading] = useState(false);
+
   const handleSearchClick = async () => {
     setNoResultsAddress({ type: null, address: null });
-    
-    // Validate addresses before searching
     if (studentAddressFilter && !normalizeAddress(studentAddressFilter)) {
       setError('Invalid student address format. Please enter a valid Ethereum address.');
       return;
     }
-    
     if (institutionFilter && !normalizeAddress(institutionFilter)) {
       setError('Invalid institution address format. Please enter a valid Ethereum address.');
       return;
     }
-    
-    // Clear previous results and errors
     setError('');
-    setSearchLoading(true);
+    setLocalLoading(true);
     setCurrentPage(1);
-    
     if (!contract || !contract.target) {
       console.error('Contract not properly initialized. Attempting to reinitialize...');
       setError('Connection to blockchain not established. Please check your wallet connection.');
-      setSearchLoading(false);
+      setLocalLoading(false);
       return;
     }
-    
-    // Use the handleSearch function from the useCertificateSearch hook
     await handleSearch({
       studentAddress: studentAddressFilter,
       institutionAddress: institutionFilter,
@@ -66,6 +57,7 @@ const AdminSearchPanel = ({
       startDate,
       endDate
     });
+    setLocalLoading(false);
   };
 
   return (
@@ -141,13 +133,12 @@ const AdminSearchPanel = ({
       />
 
       <div className="flex items-center justify-between">
-        {/* Search button spinner */}
         <button
           onClick={handleSearchClick}
-          disabled={searchLoading || loading}
+          disabled={localLoading}
           className="flex items-center px-6 py-3 bg-violet-600 hover:bg-violet-700 rounded-lg transition-colors disabled:opacity-50 shadow-lg"
         >
-          {searchLoading ? (
+          {localLoading ? (
             <div className="flex items-center">
               <div className="mr-3 h-5 w-5">
                 <FuturisticSpinner size="sm" color="white" />
