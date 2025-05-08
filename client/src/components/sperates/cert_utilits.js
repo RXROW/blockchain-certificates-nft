@@ -53,6 +53,25 @@ const processCertificatesBatch = async (contractInstance, tokenIds) => {
           contractInstance.tokenURI(tokenId).catch(() => ''),
           contractInstance.academicCertificates(tokenId).catch(() => null)
         ]);
+        
+        // Add burn status checks
+        let burnRequested = false;
+        let burnRequestTime = 0;
+        let burnApproved = false;
+        
+        try {
+          if (typeof contractInstance.burnRequestTimestamps === 'function') {
+            const timestamp = await contractInstance.burnRequestTimestamps(tokenId).catch(() => 0);
+            burnRequested = Number(timestamp) > 0;
+            burnRequestTime = Number(timestamp) * 1000; // Convert to JS timestamp
+          }
+          
+          if (typeof contractInstance.burnApproved === 'function') {
+            burnApproved = await contractInstance.burnApproved(tokenId).catch(() => false);
+          }
+        } catch (err) {
+          console.log(`Error checking burn status for certificate ${tokenId}:`, err.message);
+        }
 
         const finalTokenURI = tokenURI || (certData?.certificateHash || '');
         let metadata = null;
@@ -122,7 +141,11 @@ const processCertificatesBatch = async (contractInstance, tokenIds) => {
           version: cert[8].toString(),
           lastUpdateDate: cert[9],
           updateReason: cert[10],
-          metadataLoaded: metadata && !metadata._partialLoad
+          metadataLoaded: metadata && !metadata._partialLoad,
+          // Add burn status
+          burnRequested,
+          burnRequestTime,
+          burnApproved
         };
       } catch (error) {
         console.error(`Error processing certificate ${tokenId}:`, error);

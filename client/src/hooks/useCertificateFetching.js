@@ -40,50 +40,64 @@ export const useCertificateFetching = (setCertificates, setError, setLoading) =>
         }
       }
 
-      // Generate a guaranteed unique ID that matches the format in CertificateForm.jsx
-      const generateFallbackUniqueId = (cert, tokenId) => {
-        try {
-          const courseId = cert[2]?.toString() || '0000';
-          const studentAddress = cert[0] || '0x0000000000000000000000000000000000000000';
-          
-          const timestamp = Date.now();
-          const randomPart = Math.random().toString(36).substring(2, 8);
-          const courseIdShort = courseId.substring(0, Math.min(courseId.length, 4));
-          const studentShort = studentAddress.substring(2, 6);
-          
-          return `${courseIdShort}-${studentShort}-${timestamp.toString(36)}-${randomPart}`;
-        } catch (error) {
-          return `CERT-${tokenId}-${Date.now().toString(36)}`;
-        }
-      };
+      // Get certificate information
+      const [
+        courseId,
+        student,
+        institution,
+        grade,
+        timestamp,
+        isVerified,
+        isRevoked
+      ] = cert;
 
+      // Create a standardized certificate data object
       const certificateData = {
-        id: tokenId.toString(),
-        tokenId,
+        id: tokenId,
+        courseId: Number(courseId),
+        courseName: metadata?.courseName || metadata?.name || `Course ${courseId}`,
+        student,
+        institution,
+        grade: Number(grade),
+        completionTimestamp: Number(timestamp),
+        completionDate: new Date(Number(timestamp) * 1000).toLocaleDateString(),
+        isVerified,
+        isRevoked,
+        // Metadata fields
         tokenURI,
-        metadataCID: tokenURI ? (tokenURI.startsWith('ipfs://') ? tokenURI.slice(7) : tokenURI) : null,
+        metadataCID,
+        metadata,
         imageCID,
         imageUrl,
-        metadata,
-        // Enhanced fallback mechanism that matches the CertificateForm format
-        uniqueId: metadata?.uniqueId || 
-                metadata?.uniqueCertificateId || 
-                (metadata?.attributes?.find(attr => attr?.trait_type === 'Certificate ID' || attr?.trait_type === 'Unique ID')?.value) ||
-                generateFallbackUniqueId(cert, tokenId),
-                
-        student: cert[0],
-        institution: cert[1],
-        courseId: cert[2].toString(),
-        courseName: metadata?.name || `Course ${cert[2].toString()}`,
-        completionDate: new Date(Number(cert[3]) * 1000).toLocaleDateString(),
-        grade: Number(cert[4]),
-        isVerified: cert[5],
-        isRevoked: cert[6],
-        revocationReason: cert[7],
-        version: cert[8],
-        lastUpdateDate: cert[9],
-        updateReason: cert[10]
+        metadataLoaded: !!metadata,
+        status: isRevoked ? 'revoked' : (isVerified ? 'verified' : 'pending'),
+        // Extra details that might be populated later
+        revocationReason: '',
+        burnRequested: false,
+        burnApproved: false,
+        lastUpdateDate: '',
+        updateReason: '',
+        version: 0
       };
+
+      // Check burn status if that function exists
+      try {
+        if (typeof contractInstance.burnRequestExists === 'function') {
+          const burnStatus = await contractInstance.burnRequestExists(tokenId);
+          if (burnStatus) {
+            certificateData.burnRequested = true;
+            // Try to get if it's approved
+            try {
+              const burnApproved = await contractInstance.burnRequestApproved(tokenId);
+              certificateData.burnApproved = burnApproved;
+            } catch (approvalErr) {
+              console.error(`Could not check burn approval status for token ${tokenId}:`, approvalErr);
+            }
+          }
+        }
+      } catch (burnErr) {
+        console.error(`Error checking burn status for token ${tokenId}:`, burnErr);
+      }
 
       // Cache the certificate data
       setCachedData(`${CERTIFICATES_CACHE_KEY}_${tokenId}`, certificateData);
@@ -99,34 +113,71 @@ export const useCertificateFetching = (setCertificates, setError, setLoading) =>
       if (!currentAccount) {
         throw new Error('No account connected');
       }
+      
+      if (!contractInstance) {
+        throw new Error('Contract not initialized');
+      }
 
       console.log('Fetching certificates for account:', currentAccount);
+      setLoading(true);
 
-      const balance = await contractInstance.balanceOf(currentAccount);
-      console.log('Certificate balance:', balance.toString());
+      // First check the balance to know how many certificates the user has
+      let balance;
+      try {
+        balance = await contractInstance.balanceOf(currentAccount);
+        console.log('Certificate balance:', balance.toString());
+      } catch (error) {
+        console.error('Error fetching certificate balance:', error);
+        throw new Error(`Could not get your certificate balance: ${error.message}`);
+      }
 
+      // If user has no certificates, return empty array
+      if (balance.toString() === '0') {
+        console.log('User has no certificates');
+        setCertificates([]);
+        return [];
+      }
+
+      // Fetch all certificates for the user
       const certs = [];
+      const errors = [];
 
       for (let i = 0; i < balance; i++) {
         try {
+          // Get token ID from owner's index
           const tokenId = await contractInstance.tokenOfOwnerByIndex(currentAccount, i);
           console.log(`Fetching certificate ${i + 1}/${balance}, TokenID: ${tokenId}`);
 
+          // Get full certificate data
           const certificateData = await fetchCertificateData(contractInstance, tokenId);
           if (certificateData) {
             certs.push(certificateData);
           }
         } catch (err) {
           console.error(`Error fetching certificate ${i}:`, err);
+          errors.push(`Certificate #${i+1}: ${err.message}`);
           continue;
         }
       }
 
-      console.log('Fetched certificates:', certs);
+      console.log(`Fetched ${certs.length} certificates for user`);
       setCertificates(certs);
+      
+      // If we had errors but still got some certificates, show a warning
+      if (errors.length > 0 && certs.length > 0) {
+        setError(`Loaded ${certs.length} certificates, but failed to load ${errors.length} certificates.`);
+      }
+      // If we got no certificates at all but had errors, show full error
+      else if (errors.length > 0 && certs.length === 0) {
+        setError(`Failed to load certificates: ${errors.join('; ')}`);
+      }
+      
+      return certs;
     } catch (err) {
       console.error('Error fetching certificates:', err);
       setError(`Failed to fetch certificates: ${err.message}`);
+      setCertificates([]);
+      return [];
     } finally {
       setLoading(false);
     }

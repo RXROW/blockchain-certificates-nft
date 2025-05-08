@@ -304,10 +304,10 @@ const Sidebar = () => {
                   </NavLink>
                 </li>
 
-                {/* Verify Certificates */}
+                {/* Burn Approvals */}
                 <li>
                   <NavLink
-                    to="/dashboard/verify"
+                    to="/dashboard/burn-approvals"
                     className={({ isActive }) =>
                       `flex items-center px-4 py-3 rounded-lg ${isActive
                         ? 'bg-violet-700 text-white shadow-lg shadow-violet-700/50'
@@ -316,13 +316,13 @@ const Sidebar = () => {
                     }
                   >
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                     </svg>
                     {(!isCollapsed || isMobileView) ? (
-                      <span className="ml-3 font-medium">Verify Certificates</span>
+                      <span className="ml-3 font-medium">Burn Approvals</span>
                     ) : (
                       <span className="absolute left-full ml-2 top-1/2 -translate-y-1/2 px-2 py-1 text-xs font-medium rounded bg-gray-900 text-white opacity-0 group-hover:opacity-100 whitespace-nowrap shadow-lg z-50">
-                        Verify Certificates
+                        Burn Approvals
                       </span>
                     )}
                   </NavLink>

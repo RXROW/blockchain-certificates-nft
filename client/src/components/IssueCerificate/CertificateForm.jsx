@@ -12,6 +12,7 @@ import ProgressBar from '../Shared/ProgressBar';
 import SuccessMessage from '../Shared/SuccessMessage';
 import ErrorMessage from '../Shared/ErrorMessage';
 import IPFSResultsPanel from './IPFSResultsPanel';
+import FuturisticMinting from '../animations/FuturisticMinting';
 
 // Set constants
 const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
@@ -53,6 +54,8 @@ function CertificateForm({ isAdmin = false, userAddress: initialUserAddress = ''
   const [isAuthorized, setIsAuthorized] = useState(isAdmin);
   const [userAddress, setUserAddress] = useState(initialUserAddress);
   const [checkingAuth, setCheckingAuth] = useState(!isAdmin);
+  // Animation state - using refs to avoid hook order issues
+  const animationRef = useRef({ startAnimation: () => {}, resetAnimation: () => {} });
   
   // Refs for cleanup and preventing memory leaks
   const authCheckIntervalRef = useRef(null);
@@ -273,53 +276,57 @@ function CertificateForm({ isAdmin = false, userAddress: initialUserAddress = ''
   };
 
   const loadCoursesFromContract = async (contract) => {
-    // Get all courses
-    const uniqueCourseIds = new Set();
-    const allCourses = [];
-
-    // Try to get courses from existing certificates
-    const totalCertificates = Number(await contract.totalSupply());
-    const maxToCheck = Math.min(totalCertificates, 100);
-
-    for (let i = 0; i < maxToCheck; i++) {
-      try {
-        const tokenId = await contract.tokenByIndex(i);
-        const cert = await contract.getCertificate(tokenId);
-        uniqueCourseIds.add(cert[2].toString());
-      } catch (err) {
-        // Skip errors
-      }
-    }
-
-    // Also check for courses without certificates
-    for (let i = 1; i <= 100; i++) {
-      try {
-        const courseName = await contract.getCourseName(i.toString());
-        if (courseName && courseName.trim()) {
-          uniqueCourseIds.add(i.toString());
-        }
-      } catch (err) {
-        // Skip errors
-      }
-    }
-
-    // Get course names
-    for (const courseId of uniqueCourseIds) {
-      try {
-        const courseName = await contract.getCourseName(courseId);
-        if (courseName && courseName.trim()) {
+    try {
+      console.log('Fetching courses using batch method...');
+      
+      // Create an array of course IDs to check (1-100)
+      const courseIdsToCheck = Array.from({ length: 100 }, (_, i) => (i + 1).toString());
+      
+      // Use the batch function to get all course names at once
+      const courseNames = await contract.getCourseNamesBatch(courseIdsToCheck);
+      
+      // Process results - only include courses with non-empty names
+      const allCourses = [];
+      courseNames.forEach((name, index) => {
+        if (name && name.trim()) {
           allCourses.push({
-            id: courseId,
-            name: courseName
+            id: courseIdsToCheck[index],
+            name: name
           });
         }
-      } catch (err) {
-        // Skip errors
+      });
+      
+      console.log(`Found ${allCourses.length} courses`);
+      
+      // Sort by ID
+      return allCourses.sort((a, b) => Number(a.id) - Number(b.id));
+    } catch (error) {
+      console.error('Error using getCourseNamesBatch:', error);
+      
+      // Fallback to individual fetching if batch method fails
+      console.log('Falling back to individual course fetching...');
+      const allCourses = [];
+      
+      // Check for courses one by one (1-100)
+      for (let i = 1; i <= 100; i++) {
+        try {
+          const courseId = i.toString();
+          const courseName = await contract.getCourseName(courseId);
+          
+          if (courseName && courseName.trim()) {
+            allCourses.push({
+              id: courseId,
+              name: courseName
+            });
+          }
+        } catch (err) {
+          // Skip errors for individual courses
+        }
       }
+      
+      console.log(`Fallback method found ${allCourses.length} courses`);
+      return allCourses.sort((a, b) => Number(a.id) - Number(b.id));
     }
-
-    // Sort by ID
-    return allCourses.sort((a, b) => Number(a.id) - Number(b.id));
   };
 
   const handleInputChange = (name, value) => {
@@ -409,11 +416,24 @@ function CertificateForm({ isAdmin = false, userAddress: initialUserAddress = ''
       setImageCID(null);
       setUploadProgress(0);
 
+      // Start animation with doors closing - only start if not already active
+      animationRef.current.startAnimation();
+
       const toastId = toast.loading('Starting certificate issuance...');
-      await processCertificateIssuance(toastId);
+      
+      try {
+        await processCertificateIssuance(toastId);
+      } catch (error) {
+        // Error during issuance process - reset animation only if it's a critical error
+        animationRef.current.resetAnimation();
+        handleMintingError(error, toastId);
+        throw error;
+      }
 
     } catch (error) {
-      handleMintingError(error);
+      handleMintingError(error, toastId);
+      // Reset animation if error occurs
+      animationRef.current.resetAnimation();
     } finally {
       setLoading(false);
     }
@@ -429,12 +449,12 @@ function CertificateForm({ isAdmin = false, userAddress: initialUserAddress = ''
       const generatedCertId = generateUniqueCertificateId(formData.courseId, formData.studentAddress);
       setUniqueCertId(generatedCertId);
       
-      // Create or get a group for this course
+      // Step 1: Create or get a group for this course
       setUploadProgress(5);
       toast.loading('Creating course group...', { id: toastId });
       const groupId = await createOrGetCourseGroup(formData.courseId, courseName);
 
-      // Upload image to IPFS
+      // Step 2: Upload image to IPFS
       setUploadProgress(10);
       toast.loading('Uploading image to IPFS...', { id: toastId });
       const imageCID = await uploadToIPFS(
@@ -456,7 +476,7 @@ function CertificateForm({ isAdmin = false, userAddress: initialUserAddress = ''
       setImageCID(imageCID);
       setUploadProgress(50);
 
-      // Create and upload metadata
+      // Step 3: Create and upload metadata
       setUploadProgress(70);
       toast.loading('Creating and uploading metadata...', { id: toastId });
 
@@ -479,15 +499,29 @@ function CertificateForm({ isAdmin = false, userAddress: initialUserAddress = ''
       setMetadataCID(metadataCID);
       setUploadProgress(100);
 
-      // Mint the certificate on blockchain
+      // Step 4: Mint the certificate on blockchain
+      toast.loading('Minting certificate on blockchain...', { id: toastId });
       await mintCertificateOnBlockchain(metadataCID, toastId);
 
       toast.success('Certificate issued successfully!', { id: toastId });
       setSuccess(`Certificate issued successfully! Unique ID: ${generatedCertId}`);
 
+      // Step 5: Update animation with certificate data for reveal
+      const certificateData = {
+        imageUrl: `https://gateway.pinata.cloud/ipfs/${imageCID}`,
+        title: formData.certificateData.trim() || `${courseName} Certificate`,
+        id: generatedCertId
+      };
+      
+      // Show certificate in animation - use a timeout to ensure animation has time to progress
+      setTimeout(() => {
+        animationRef.current.startAnimation(certificateData);
+      }, 1000);
+
       // Reset form
       resetForm();
     } catch (error) {
+      // Let the parent function handle the error
       throw error;
     }
   };
@@ -590,12 +624,13 @@ function CertificateForm({ isAdmin = false, userAddress: initialUserAddress = ''
     setValidationErrors({});
   };
 
-  const handleMintingError = (error) => {
+  const handleMintingError = (error, toastId) => {
+    if (toastId) toast.dismiss(toastId); // Dismiss the loading toast if present
     console.error("Minting error:", error);
-    if (error.message.includes('IPFS') || error.message.includes('Pinata') || error.message.includes('upload')) {
+    if (error.message && (error.message.includes('IPFS') || error.message.includes('Pinata') || error.message.includes('upload'))) {
       toast.error('Failed to upload to IPFS. Please try again later.');
       setError('Failed to upload to IPFS. Please try again later. Error: ' + error.message);
-    } else if (error.message.includes('user rejected')) {
+    } else if (error.message && error.message.includes('user rejected')) {
       toast.error('Transaction was rejected by user');
       setError('Transaction was rejected by user');
     } else {
@@ -606,35 +641,50 @@ function CertificateForm({ isAdmin = false, userAddress: initialUserAddress = ''
 
   const validateForm = () => {
     let isValid = true;
-
-    // Reset validation errors
     const newValidationErrors = {};
 
-    // Check student address
+    // Aggressive Ethereum address validation
+    const ethAddressRegex = /^0x[a-fA-F0-9]{40}$/;
     if (!formData.studentAddress.trim()) {
       newValidationErrors.studentAddress = 'Student address is required';
       isValid = false;
+    } else if (!ethAddressRegex.test(formData.studentAddress.trim())) {
+      newValidationErrors.studentAddress = 'Invalid Ethereum address format';
+      isValid = false;
     }
 
-    // Check course
+    // Grade: must be number 1-100
+    const gradeNum = Number(formData.grade);
+    if (!formData.grade.trim()) {
+      newValidationErrors.grade = 'Grade is required';
+      isValid = false;
+    } else if (!/^[0-9]+$/.test(formData.grade.trim())) {
+      newValidationErrors.grade = 'Grade must be a number';
+      isValid = false;
+    } else if (isNaN(gradeNum) || gradeNum < 1 || gradeNum > 100) {
+      newValidationErrors.grade = 'Grade must be between 1 and 100';
+      isValid = false;
+    }
+
+    // Certificate title: only letters and spaces, max 40 chars
+    if (!formData.certificateData.trim()) {
+      newValidationErrors.certificateData = 'Certificate title is required';
+      isValid = false;
+    } else if (!/^[A-Za-z ]+$/.test(formData.certificateData.trim())) {
+      newValidationErrors.certificateData = 'Title must contain only letters and spaces';
+      isValid = false;
+    } else if (formData.certificateData.trim().length > 40) {
+      newValidationErrors.certificateData = 'Title must be 40 characters or less';
+      isValid = false;
+    }
+
+    // Course
     if (!formData.courseId) {
       newValidationErrors.courseId = 'Course is required';
       isValid = false;
     }
 
-    // Check grade
-    if (!formData.grade.trim()) {
-      newValidationErrors.grade = 'Grade is required';
-      isValid = false;
-    }
-
-    // Check certificate title
-    if (!formData.certificateData.trim()) {
-      newValidationErrors.certificateData = 'Certificate title is required';
-      isValid = false;
-    }
-
-    // Check image
+    // Image
     if (!certificateImage) {
       newValidationErrors.certificateImage = 'Please select an image';
       isValid = false;
@@ -645,90 +695,108 @@ function CertificateForm({ isAdmin = false, userAddress: initialUserAddress = ''
   };
 
   return (
-    <div className="space-y-8">
-      {error && <ErrorMessage message={error} />}
-      {success && <SuccessMessage message={success} />}
+    <FuturisticMinting.Provider>
+      <AnimationHookHandler animationRef={animationRef} />
+      <div className="space-y-8">
+        {error && <ErrorMessage message={error} />}
+        {success && <SuccessMessage message={success} />}
 
-      {!isAuthorized && !checkingAuth && (
-        <div className="p-4 bg-red-900/50 border border-red-800 rounded-lg text-white">
-          <h3 className="text-lg font-medium">Authorization Error</h3>
-          <p className="mt-1">Your institution is not authorized to issue certificates. Please contact the administrator.</p>
-          <button 
-            onClick={() => checkAuthorization(true)}
-            className="mt-2 px-4 py-1 bg-red-700 hover:bg-red-600 rounded text-sm font-medium transition-colors"
-          >
-            Check Status Again
-          </button>
-        </div>
-      )}
+        {!isAuthorized && !checkingAuth && (
+          <div className="p-4 bg-red-900/50 border border-red-800 rounded-lg text-white">
+            <h3 className="text-lg font-medium">Authorization Error</h3>
+            <p className="mt-1">Your institution is not authorized to issue certificates. Please contact the administrator.</p>
+            <button 
+              onClick={() => checkAuthorization(true)}
+              className="mt-2 px-4 py-1 bg-red-700 hover:bg-red-600 rounded text-sm font-medium transition-colors"
+            >
+              Check Status Again
+            </button>
+          </div>
+        )}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-        <StudentInfoForm
-          formData={formData}
-          onInputChange={handleInputChange}
-          validationErrors={validationErrors}
-          touchedFields={touchedFields}
-          loading={loading || !isAuthorized}
-          courses={courses}
-          loadingCourses={loadingCourses}
-        />
-
-        <div className="space-y-6">
-          <CertificateImageUpload
-            imagePreview={imagePreview}
-            onImageUpload={handleImageUpload}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+          <StudentInfoForm
+            formData={formData}
+            onInputChange={handleInputChange}
+            validationErrors={validationErrors}
+            touchedFields={touchedFields}
             loading={loading || !isAuthorized}
-            validationError={validationErrors.certificateImage}
-            touched={touchedFields.certificateImage}
+            courses={courses}
+            loadingCourses={loadingCourses}
           />
 
-          {loading && (
-            <ProgressBar
-              progress={uploadProgress}
-              stage={
-                uploadProgress < 50
-                  ? 'Uploading image...'
-                  : uploadProgress < 80
-                    ? 'Processing metadata...'
-                    : 'Minting certificate...'
-              }
+          <div className="space-y-6">
+            <CertificateImageUpload
+              imagePreview={imagePreview}
+              onImageUpload={handleImageUpload}
+              loading={loading || !isAuthorized}
+              validationError={validationErrors.certificateImage}
+              touched={touchedFields.certificateImage}
             />
-          )}
+
+            {loading && (
+              <ProgressBar
+                progress={uploadProgress}
+                stage={
+                  uploadProgress < 50
+                    ? 'Uploading image...'
+                    : uploadProgress < 80
+                      ? 'Processing metadata...'
+                      : 'Minting certificate...'
+                }
+              />
+            )}
+          </div>
         </div>
-      </div>
 
-      <div className="flex justify-end">
-        <button
-          onClick={mintCertificate}
-          disabled={loading || !isAuthorized || checkingAuth}
-          className="px-8 py-4 bg-gradient-to-r from-violet-500 to-pink-500 text-white rounded-lg font-medium hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {loading ? (
-            <div className="flex items-center gap-2">
-              <LoadingSpinner size="small" />
-              <span>Processing...</span>
-            </div>
-          ) : checkingAuth ? (
-            <div className="flex items-center gap-2">
-              <LoadingSpinner size="small" />
-              <span>Checking Authorization...</span>
-            </div>
-          ) : !isAuthorized ? (
-            'Not Authorized'
-          ) : (
-            'Mint Certificate'
-          )}
-        </button>
-      </div>
+        <div className="flex justify-end">
+          <button
+            onClick={mintCertificate}
+            disabled={loading || !isAuthorized || checkingAuth}
+            className="px-8 py-4 bg-gradient-to-r from-violet-500 to-pink-500 text-white rounded-lg font-medium hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {loading ? (
+              <div className="flex items-center gap-2">
+                <LoadingSpinner size="small" />
+                <span>Processing...</span>
+              </div>
+            ) : checkingAuth ? (
+              <div className="flex items-center gap-2">
+                <LoadingSpinner size="small" />
+                <span>Checking Authorization...</span>
+              </div>
+            ) : !isAuthorized ? (
+              'Not Authorized'
+            ) : (
+              'Mint Certificate'
+            )}
+          </button>
+        </div>
 
-      {metadataCID && imageCID && (
-        <IPFSResultsPanel
-          metadataCID={metadataCID}
-          imageCID={imageCID}
-        />
-      )}
-    </div>
+        {metadataCID && imageCID && (
+          <IPFSResultsPanel
+            metadataCID={metadataCID}
+            imageCID={imageCID}
+          />
+        )}
+
+        {/* Futuristic minting animation overlay */}
+        <FuturisticMinting.Overlay />
+      </div>
+    </FuturisticMinting.Provider>
   );
+}
+
+// Helper component to properly use the animation hook inside the provider
+function AnimationHookHandler({ animationRef }) {
+  const animation = FuturisticMinting.useAnimation();
+  
+  // Update the ref with the actual functions
+  React.useEffect(() => {
+    animationRef.current = animation;
+  }, [animation, animationRef]);
+  
+  return null;
 }
 
 export default CertificateForm;

@@ -1,14 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'; 
+import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom'; 
 import Navbar from './components/Shared/Navbar';
 import LandingPage from './pages/LandingPage/LandingPage';
 import DashboardLayout from './components/Dashboard/DashboardLayout';
 import CertificatesList from './pages/Dashboard/CertificatesList';
 import IssueCertificate from './pages/Dashboard/IssueCertificate';
-import VerifyCertificates from './pages/Dashboard/VerifyCertificates';
 import CertificateUpdate from './pages/Dashboard/UpdateCertificate';
 import ManageCourses from './pages/Dashboard/ManageCourses';
 import ManageInstitutions from './pages/Dashboard/ManageInstitutions';
+import BurnApprovals from './pages/Dashboard/BurnApprovals';
 import Dashboard from './pages/Dashboard/Dashboard'; 
 import { Toaster } from 'react-hot-toast';
 import "slick-carousel/slick/slick.css";
@@ -115,10 +115,10 @@ function App() {
 
                             {/* Institution & admin routes */}
                             <Route path="issue" element={<IssueCertificate />} />
-                            <Route path="verify" element={<VerifyCertificates />} />
                             <Route path="update" element={<CertificateUpdate />} />
                             <Route path="courses" element={<ManageCourses isInstitution={isInstitution} />} />
                             <Route path="institutions" element={<ManageInstitutions />} />
+                            <Route path="burn-approvals" element={<BurnApprovals />} />
 
                             {/* Catch-all for dashboard */}
                             <Route path="*" element={<Navigate to="/dashboard/certificates" replace />} />

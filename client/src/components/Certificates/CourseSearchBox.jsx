@@ -1,13 +1,19 @@
-import React from 'react';
+import React, { useState } from 'react';
 import FuturisticSpinner from '../../components/ui/FuturisticSpinner';
 
 const CourseSearchBox = ({
   courseNameFilter,
   setCourseNameFilter,
-  handleCourseNameSearch,
-  searchLoading,
-  loading
+  handleCourseNameSearch
 }) => {
+  const [localLoading, setLocalLoading] = useState(false);
+
+  const onSearch = async () => {
+    setLocalLoading(true);
+    await handleCourseNameSearch();
+    setLocalLoading(false);
+  };
+
   return (
     <div className="mb-6 bg-gray-800/50 rounded-lg p-4 border border-gray-700">
       <h3 className="text-lg font-semibold mb-3 text-white">Search by Course Name</h3>
@@ -21,11 +27,11 @@ const CourseSearchBox = ({
         />
         {/* Course Name search button */}
         <button
-          onClick={handleCourseNameSearch}
-          disabled={searchLoading || loading}
+          onClick={onSearch}
+          disabled={localLoading}
           className="px-4 py-2 bg-violet-600 hover:bg-violet-700 rounded-lg transition-colors disabled:opacity-50"
         >
-          {searchLoading ? (
+          {localLoading ? (
             <div className="flex items-center">
               <div className="mr-2 h-4 w-4">
                 <FuturisticSpinner size="sm" color="white" />
