@@ -1,6 +1,7 @@
-import { useCallback } from 'react';
+import { useState, useCallback } from 'react';
 import { BrowserProvider } from 'ethers';
 import { setCachedData } from '../components/sperates/f1.js';
+import TransactionErrorModal from '../components/ui/TransactionErrorModal';
 
 /**
  * Custom hook for certificate verification
@@ -21,6 +22,9 @@ export const useCertificateVerification = (
   setSelectedCertificate,
   CERTIFICATES_CACHE_KEY
 ) => {
+  // Add state for error handling
+  const [error, setError] = useState(null);
+  const [showErrorModal, setShowErrorModal] = useState(false);
   
   const handleVerifyCertificate = useCallback(async (certificate) => {
     try {
@@ -46,27 +50,29 @@ export const useCertificateVerification = (
         setSelectedCertificate(updatedCert);
       }
 
-      alert(`Certificate ${certificate.id} verified successfully`);
+      // Show success message or toast here instead of alert
+      console.log(`Certificate ${certificate.id} verified successfully`);
     } catch (error) {
       console.error('Error verifying certificate:', error);
       
-      // Enhanced error handling for specific error types
-      if (error.message.includes('AccessControlUnauthorizedAccount')) {
-        alert('You do not have permission to verify certificates');
-      } else if (error.message.includes('ERC721NonexistentToken')) {
-        alert('This certificate no longer exists');
-      } else if (error.message.includes('AccessControlBadConfirmation')) {
-        alert('Role verification failed');
-      } else if (error.message.includes('OwnableUnauthorizedAccount')) {
-        alert('Admin access required for this operation');
-      } else {
-        alert(`Failed to verify certificate: ${error.message}`);
-      }
+      // Set error and show error modal
+      setError(error);
+      setShowErrorModal(true);
     } finally {
       // Clear loading only for this specific certificate
       setVerifyLoading(prev => ({ ...prev, [certificate.id]: false }));
     }
   }, [contract, selectedCertificate, setVerifyLoading, setCertificates, setSelectedCertificate, CERTIFICATES_CACHE_KEY]);
 
-  return { handleVerifyCertificate };
+  // Function to close error modal
+  const closeErrorModal = useCallback(() => {
+    setShowErrorModal(false);
+  }, []);
+
+  return { 
+    handleVerifyCertificate,
+    error,
+    showErrorModal,
+    closeErrorModal
+  };
 }; 

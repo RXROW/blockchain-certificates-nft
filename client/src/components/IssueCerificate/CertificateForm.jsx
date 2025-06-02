@@ -501,7 +501,7 @@ function CertificateForm({ isAdmin = false, userAddress: initialUserAddress = ''
 
       // Step 4: Mint the certificate on blockchain
       toast.loading('Minting certificate on blockchain...', { id: toastId });
-      await mintCertificateOnBlockchain(metadataCID, toastId);
+      await mintCertificateOnBlockchain(metadataCID, toastId, courseName, generatedCertId, imageCID, groupId);
 
       toast.success('Certificate issued successfully!', { id: toastId });
       setSuccess(`Certificate issued successfully! Unique ID: ${generatedCertId}`);
@@ -526,7 +526,7 @@ function CertificateForm({ isAdmin = false, userAddress: initialUserAddress = ''
     }
   };
 
-  const createCertificateMetadata = (imageCID, courseName, certId) => {
+  const createCertificateMetadata = (imageCID, courseName, certId, txHash = '') => {
     // Generate certificate title if not provided
     const certificateTitle = formData.certificateData.trim() || 
       `${courseName} Certificate for ${formData.studentAddress.substring(0, 6)}...`;
@@ -560,6 +560,10 @@ function CertificateForm({ isAdmin = false, userAddress: initialUserAddress = ''
         {
           trait_type: "Student Address",
           value: formData.studentAddress
+        },
+        {
+          trait_type: "Transaction Hash",
+          value: txHash
         }
       ],
       courseId: formData.courseId,
@@ -567,11 +571,12 @@ function CertificateForm({ isAdmin = false, userAddress: initialUserAddress = ''
       uniqueCertificateId: certId,
       grade: formData.grade,
       studentAddress: formData.studentAddress,
-      issueDate: new Date().toISOString()
+      issueDate: new Date().toISOString(),
+      transactionHash: txHash
     };
   };
 
-  const mintCertificateOnBlockchain = async (metadataCID, toastId) => {
+  const mintCertificateOnBlockchain = async (metadataCID, toastId, courseName, certId, imageCID, groupId) => {
     toast.loading('Minting certificate on blockchain...', { id: toastId });
     const provider = new ethers.BrowserProvider(window.ethereum);
     const signer = await provider.getSigner();
@@ -607,7 +612,47 @@ function CertificateForm({ isAdmin = false, userAddress: initialUserAddress = ''
       formData.grade,
       tokenURI  // This will be stored as both certificateHash and tokenURI
     );
-    await tx.wait();
+    
+    // Wait for transaction confirmation to get the transaction hash
+    const receipt = await tx.wait();
+    console.log('Transaction receipt:', receipt);
+    
+    // Update the metadata on IPFS with the transaction hash
+    if (receipt && receipt.hash) {
+      try {
+        // Create updated metadata with transaction hash
+        const updatedMetadata = createCertificateMetadata(imageCID, courseName, certId, receipt.hash);
+        
+        // Upload the updated metadata
+        const updatedMetadataCID = await uploadJSONToIPFS(
+          updatedMetadata,
+          () => {},
+          formData.courseId,
+          formData.studentAddress,
+          groupId
+        );
+        
+        if (updatedMetadataCID) {
+          console.log('Updated metadata with transaction hash:', updatedMetadataCID);
+          // Update the token URI with the new metadata
+          const updatedTokenURI = `ipfs://${updatedMetadataCID}`;
+          try {
+            const updateTx = await contract.setCertificateURI(
+              receipt.logs[0].topics[3], // This is the token ID from the transfer event
+              updatedTokenURI
+            );
+            await updateTx.wait();
+            console.log('Updated token URI with transaction hash metadata');
+          } catch (error) {
+            console.error('Error updating token URI:', error);
+          }
+        }
+      } catch (error) {
+        console.error('Error updating metadata with transaction hash:', error);
+      }
+    }
+    
+    return receipt;
   };
 
   const resetForm = () => {

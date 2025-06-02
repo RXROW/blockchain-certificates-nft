@@ -41,6 +41,9 @@ import ImageModal from '../../components/Certificates/Modals/ImageModal';
 import RevokeModal from '../../components/Certificates/Modals/RevokeModal';
 import BatchActionBar from '../../components/Certificates/Modals/BatchActionBar';
 import BurnModal from '../../components/Certificates/Modals/BurnModal';
+import TransactionErrorModal from '../../components/ui/TransactionErrorModal';
+import QRCodeModal from '../../components/Certificates/Modals/QRCodeModal';
+import { useCertificateQRModal } from '../../hooks/useCertificateQRModal';
 
 const CertificatesList = () => {
   
@@ -88,6 +91,9 @@ const CertificatesList = () => {
   
   // Add state for burning certificates
   const [burningCertificates, setBurningCertificates] = useState({});
+  
+  // Add state for transfer functionality
+  const [transfersAllowed, setTransfersAllowed] = useState(false);
   
   // Use the certificate search hook
   const {
@@ -524,7 +530,12 @@ const CertificatesList = () => {
   }, [contract, account, handleCertificateEvent]);
 
   // Replace the handleVerifyCertificate function with the hook
-  const { handleVerifyCertificate } = useCertificateVerification(
+  const { 
+    handleVerifyCertificate,
+    error: verifyError,
+    showErrorModal: showVerifyErrorModal,
+    closeErrorModal: closeVerifyErrorModal
+  } = useCertificateVerification(
     contract,
     selectedCertificate,
     setVerifyLoading,
@@ -534,7 +545,12 @@ const CertificatesList = () => {
   );
 
   // Replace the handleRevokeCertificate function with the hook
-  const { handleRevokeCertificate } = useCertificateRevocation(
+  const { 
+    handleRevokeCertificate,
+    error: revokeError,
+    showErrorModal: showRevokeErrorModal,
+    closeErrorModal: closeRevokeErrorModal
+  } = useCertificateRevocation(
     contract,
     selectedCertificate,
     setRevokeLoading,
@@ -708,7 +724,10 @@ const CertificatesList = () => {
     burnCertificate,
     openBurnModal,
     closeBurnModal,
-    cancelBurnRequest
+    cancelBurnRequest,
+    error: burnError,
+    showErrorModal: showBurnErrorModal,
+    closeErrorModal: closeBurnErrorModal
   } = useCertificateBurn(
     contract,
     setCertificates,
@@ -877,6 +896,14 @@ const CertificatesList = () => {
     }, 100);
   }, []);
 
+  // QR Code Modal
+  const {
+    showQRModal,
+    selectedCertificate: qrCertificate,
+    openQRModal,
+    closeQRModal
+  } = useCertificateQRModal();
+
   // Update the modal rendering section
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-950 to-violet-950 text-white pt-16 pb-20">
@@ -998,6 +1025,7 @@ const CertificatesList = () => {
                   revokeLoading={revokeLoading}
                   openBurnModal={openBurnModal}
                   burnTimelock={burnTimelock}
+                  openQRModal={openQRModal}
                   onBurnAnimationStart={startBurnAnimation}
                 />
               ) : (
@@ -1017,6 +1045,7 @@ const CertificatesList = () => {
                   revokeLoading={revokeLoading}
                   openBurnModal={openBurnModal}
                   burnTimelock={burnTimelock}
+                  openQRModal={openQRModal}
                   onBurnAnimationStart={startBurnAnimation}
                 />
               )}
@@ -1139,6 +1168,35 @@ const CertificatesList = () => {
         handleDirectBurn={burnCertificate}
         isInstitute={isInstitute}
         onBurnAnimationStart={startBurnAnimation}
+      />
+
+      {/* Transaction error modal */}
+      <TransactionErrorModal
+        show={showRevokeErrorModal}
+        onClose={closeRevokeErrorModal}
+        error={revokeError}
+        action="revoke"
+      />
+
+      <TransactionErrorModal
+        show={showVerifyErrorModal}
+        onClose={closeVerifyErrorModal}
+        error={verifyError}
+        action="verify"
+      />
+
+      <TransactionErrorModal
+        show={showBurnErrorModal}
+        onClose={closeBurnErrorModal}
+        error={burnError}
+        action="burn"
+      />
+
+      {/* QR Code Modal */}
+      <QRCodeModal
+        showQRModal={showQRModal}
+        certificate={qrCertificate}
+        closeQRModal={closeQRModal}
       />
 
     </div>

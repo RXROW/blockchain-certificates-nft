@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { FaEye, FaFileAlt, FaCheck, FaBan, FaTrash, FaClock, FaExchangeAlt } from 'react-icons/fa';
+import { FaEye, FaFileAlt, FaCheck, FaBan, FaTrash, FaClock, FaExchangeAlt, FaQrcode } from 'react-icons/fa';
 import FuturisticSpinner from '../../../components/ui/FuturisticSpinner';
+import ButtonSpinner from '../../../components/ui/ButtonSpinner';
 import { getStatusColor, getStatusText, formatGrade } from '../../../components/sperates/cert_utilits.js';
 import BurnStatusIndicator from '../BurnStatusIndicator';
 import BurningCertificate from './BurningCertificate';
@@ -21,8 +22,7 @@ const CertificateGrid = ({
   openBurnModal,
   burnTimelock,
   onBurnAnimationStart,
-  openTransferModal,
-  transfersAllowed
+  openQRModal
 }) => {
   // Track which certificates are currently burning
   const [burningCertificates, setBurningCertificates] = useState({});
@@ -179,6 +179,15 @@ const CertificateGrid = ({
                 View
               </button>
 
+              <button
+                onClick={() => openQRModal(certificate)}
+                className="flex items-center px-3 py-1.5 bg-teal-600 hover:bg-teal-700 rounded-lg transition-colors text-sm"
+                title="Share with QR Code"
+              >
+                <FaQrcode className="mr-1" />
+                QR Code
+              </button>
+
               {(isAdmin || isInstitute) && !certificate.isVerified && !certificate.isRevoked && (
                 <button
                   onClick={() => handleVerifyCertificate(certificate)}
@@ -186,8 +195,8 @@ const CertificateGrid = ({
                   className="flex items-center px-3 py-1.5 bg-green-600 hover:bg-green-700 rounded-lg transition-colors text-sm"
                 >
                   {verifyLoading[certificate.id] ? (
-                    <div className="mr-1 h-4 w-4">
-                      <FuturisticSpinner size="sm" color="white" />
+                    <div className="mr-1">
+                      <ButtonSpinner color="green" />
                     </div>
                   ) : (
                     <FaCheck className="mr-1" />
@@ -203,23 +212,13 @@ const CertificateGrid = ({
                   className="flex items-center px-3 py-1.5 bg-red-600 hover:bg-red-700 rounded-lg transition-colors text-sm"
                 >
                   {revokeLoading[certificate.id] ? (
-                    <div className="mr-1 h-4 w-4">
-                      <FuturisticSpinner size="sm" color="white" />
+                    <div className="mr-1">
+                      <ButtonSpinner color="red" />
                     </div>
                   ) : (
                     <FaBan className="mr-1" />
                   )}
                   Revoke
-                </button>
-              )}
-
-              {(isAdmin || isInstitute) && !certificate.isRevoked && transfersAllowed && (
-                <button
-                  onClick={() => openTransferModal(certificate)}
-                  className="flex items-center px-3 py-1.5 bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors text-sm"
-                >
-                  <FaExchangeAlt className="mr-1" />
-                  Transfer
                 </button>
               )}
 

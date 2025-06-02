@@ -8,6 +8,7 @@ import ApprovalConfirmationModal from '../../components/Certificates/Modals/Appr
 import BatchActionBar from '../../components/Certificates/Modals/BatchActionBar';
 import Loading from '../../components/Shared/LoadingSpinner';
 import { toast } from 'react-hot-toast';
+import TransactionErrorModal from '../../components/ui/TransactionErrorModal';
 
 const BurnApprovals = () => {
   // State for burn requests
@@ -36,7 +37,10 @@ const BurnApprovals = () => {
   const [contract, setContract] = useState(null);
   const { 
     approveBurnCertificate, 
-    cancelBurnRequest 
+    cancelBurnRequest,
+    error: burnError,
+    showErrorModal: showBurnErrorModal,
+    closeErrorModal: closeBurnErrorModal
   } = useCertificateBurn(contract, setBurnRequests, setSelectedCertificate);
   
   // First, add burnTimelock to state and get it from the contract
@@ -748,6 +752,14 @@ const BurnApprovals = () => {
               isApproved={selectedCertificate.burnApproved}
             />
           )}
+          
+          {/* Transaction Error Modal */}
+          <TransactionErrorModal
+            show={showBurnErrorModal}
+            onClose={closeBurnErrorModal}
+            error={burnError}
+            action="burn"
+          />
         </>
       )}
     </div>

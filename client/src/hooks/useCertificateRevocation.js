@@ -1,6 +1,7 @@
-import { useCallback } from 'react';
+import { useState, useCallback } from 'react';
 import { BrowserProvider } from 'ethers';
 import { setCachedData } from '../components/sperates/f1.js';
+import TransactionErrorModal from '../components/ui/TransactionErrorModal';
 
 /**
  * Custom hook for certificate revocation
@@ -25,6 +26,9 @@ export const useCertificateRevocation = (
   setRevocationReason,
   CERTIFICATES_CACHE_KEY
 ) => {
+  // Add state for error handling
+  const [error, setError] = useState(null);
+  const [showErrorModal, setShowErrorModal] = useState(false);
   
   const handleRevokeCertificate = useCallback(async (certificate, reason) => {
     try {
@@ -52,27 +56,30 @@ export const useCertificateRevocation = (
 
       setShowRevokeModal(false);
       setRevocationReason('');
-      alert(`Certificate ${certificate.id} revoked successfully`);
+      
+      // Show success message or toast here instead of alert
+      console.log(`Certificate ${certificate.id} revoked successfully`);
     } catch (error) {
       console.error('Error revoking certificate:', error);
       
-      // Enhanced error handling for specific error types
-      if (error.message.includes('AccessControlUnauthorizedAccount')) {
-        alert('You do not have permission to revoke certificates');
-      } else if (error.message.includes('ERC721NonexistentToken')) {
-        alert('This certificate no longer exists');
-      } else if (error.message.includes('AccessControlBadConfirmation')) {
-        alert('Role verification failed');
-      } else if (error.message.includes('OwnableUnauthorizedAccount')) {
-        alert('Admin access required for this operation');
-      } else {
-        alert(`Failed to revoke certificate: ${error.message}`);
-      }
+      // Set error and show error modal instead of alerts
+      setError(error);
+      setShowErrorModal(true);
     } finally {
       // Clear loading only for this specific certificate
       setRevokeLoading(prev => ({ ...prev, [certificate.id]: false }));
     }
   }, [contract, selectedCertificate, setRevokeLoading, setCertificates, setSelectedCertificate, setShowRevokeModal, setRevocationReason, CERTIFICATES_CACHE_KEY]);
 
-  return { handleRevokeCertificate };
+  // Function to close error modal
+  const closeErrorModal = useCallback(() => {
+    setShowErrorModal(false);
+  }, []);
+
+  return { 
+    handleRevokeCertificate,
+    error,
+    showErrorModal,
+    closeErrorModal
+  };
 }; 

@@ -1,5 +1,5 @@
 import React from 'react';
-import { FaEye, FaFileAlt, FaCheck, FaBan } from 'react-icons/fa';
+import { FaEye, FaFileAlt, FaCheck, FaBan, FaQrcode } from 'react-icons/fa';
 import FuturisticSpinner from '../../../components/ui/FuturisticSpinner';
 import { getStatusColor, getStatusText, formatGrade } from '../../../components/sperates/cert_utilits.js';
 
@@ -14,7 +14,8 @@ const CertificateTableRow = ({
   handleVerifyCertificate,
   verifyLoading,
   openRevokeModal,
-  revokeLoading
+  revokeLoading,
+  openQRModal
 }) => {
   return (
     <tr className="border-t border-gray-700 hover:bg-gray-700/50">
@@ -65,6 +66,13 @@ const CertificateTableRow = ({
             title="View Certificate"
           >
             <FaEye />
+          </button>
+          <button
+            onClick={() => openQRModal(certificate)}
+            className="p-1 text-teal-400 hover:text-teal-300"
+            title="Share with QR Code"
+          >
+            <FaQrcode />
           </button>
 
           {(isAdmin || isInstitute) && !certificate.isVerified && !certificate.isRevoked && (

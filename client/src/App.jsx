@@ -14,6 +14,7 @@ import { Toaster } from 'react-hot-toast';
 import "slick-carousel/slick/slick.css";
 import "slick-carousel/slick/slick-theme.css";
 import Loading from './components/Shared/LoadingSpinner';
+import PublicCertificateView from './pages/CertificateDetails/PublicCertificateView';
 
 
 
@@ -96,6 +97,9 @@ function App() {
                     <Routes>
                         {/* Public route */}
                         <Route path="/" element={<LandingPage />} />
+
+                        {/* Public certificate route */}
+                        <Route path="/certificate/:id" element={<PublicCertificateView />} />
 
                         {/* Dashboard routes */}
                         <Route

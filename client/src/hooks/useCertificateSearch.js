@@ -7,10 +7,10 @@ import {
   searchCertificatesByCourseName,
   fetchVerifiedCertificates,
   fetchPendingCertificates,
-  fetchRevokedCertificates
+  fetchRevokedCertificates,
+  fetchCertificateByTokenId
 } from '../components/sperates/filters';
 import { updateVisibleCertificates } from '../components/sperates/cert_utilits';
-import { fetchCertificateByTokenId } from '../components/sperates/filters';
 
 export const useCertificateSearch = (
   contract,
@@ -439,48 +439,87 @@ export const useCertificateSearch = (
     startDate,
     endDate
   }) => {
-    // Clear previous results and errors
-    setError('');
-    setSearchLoading(true);
-    setCurrentPage(1);
-    setNoResultsAddress({ type: null, address: null });
+    setIsSearching(true);
     
     try {
-      if (!contract || !contract.target) {
-        console.error('Contract not properly initialized.');
-        setError('Connection to blockchain not established. Please check your wallet connection.');
-        setSearchLoading(false);
+      // Clear previous results
+      setError('');
+      
+      // Reset the current page for new search
+      setCurrentPage(1);
+      
+      // Check for specific certificate ID search
+      if (searchTerm && /^\d+$/.test(searchTerm.trim())) {
+        await handleTokenIdSearch(Number(searchTerm.trim()));
         return;
       }
       
-      // Log contract state for debugging
-      console.log('Contract address:', contract.target);
-      
-      // Use optimized contract filtering functions based on selected filters
-      if (startDate && endDate) {
-        // If date range is set, use that for filtering
-        await handleDateRangeSearch(startDate, endDate);
-      } else if (statusFilter !== 'all' && !searchTerm && !studentAddress && !institutionAddress) {
-        // If only status filter is set, use dedicated functions
+      // Status filter
+      if (statusFilter && statusFilter !== 'all') {
         await handleStatusSearch(statusFilter);
-      } else if (studentAddress && !searchTerm && !institutionAddress) {
-        // If only student filter is set
-        await handleStudentSearch(studentAddress);
-      } else if (institutionAddress && !searchTerm && !studentAddress) {
-        // If only institution filter is set
-        await handleInstitutionSearch(institutionAddress);
-      } else if (searchTerm && /^\d+$/.test(searchTerm.trim())) {
-        // If searching for a numeric ID, assume it's a token ID
-        await handleTokenIdSearch(Number(searchTerm.trim()));
-      } else if (courseName) {
-        // If course name is provided
-        await handleCourseNameSearch();
+        return;
       }
+      
+      // Student address filter
+      if (studentAddress) {
+        await handleStudentSearch(studentAddress);
+        return;
+      }
+      
+      // Institution address filter
+      if (institutionAddress) {
+        await handleInstitutionSearch(institutionAddress);
+        return;
+      }
+      
+      // Course name search
+      if (searchTerm && !(/^\d+$/.test(searchTerm.trim()))) {
+        await handleCourseNameSearch();
+        return;
+      }
+      
+      // Date range search
+      if (startDate || endDate) {
+        await handleDateRangeSearch(startDate, endDate);
+        return;
+      }
+      
+      // If no specific search criteria, fetch recent certificates
+      // This handles retrieving certificates appropriately for both admin and regular users
+      console.log('No specific search criteria, fetching recent certificates');
+      await fetchAllCertificates(contract, {
+        reset: true,
+        isAdmin,
+        maxResults,
+        currentPage: 1,
+        certificates: [],
+        loadingMore: false,
+        isSearching: false,
+        searchTerm: '',
+        statusFilter: 'all',
+        studentAddressFilter: '',
+        institutionFilter: '',
+        startDate: null,
+        endDate: null,
+        setCurrentPage,
+        setHasMore,
+        setLoading,
+        setSearchLoading,
+        setCertificates,
+        setVisibleCertificates,
+        setLoadingMore,
+        setIsSearching,
+        setError,
+        setTotalCertificates,
+        setLastUpdated,
+        setNoResultsAddress,
+        updateVisibleCertificates
+      });
     } catch (error) {
       console.error('Error during search:', error);
       setError(`Search failed: ${error.message}`);
     } finally {
-      setSearchLoading(false);
+      setIsSearching(false);
     }
   }, [
     contract,
@@ -493,7 +532,8 @@ export const useCertificateSearch = (
     setError,
     setSearchLoading,
     setCurrentPage,
-    setNoResultsAddress
+    setNoResultsAddress,
+    setIsSearching
   ]);
 
   return {

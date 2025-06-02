@@ -1,6 +1,7 @@
 import React from 'react';
 import { FaCheck, FaBan } from 'react-icons/fa';
 import FuturisticSpinner from '../../../components/ui/FuturisticSpinner';
+import ButtonSpinner from '../../../components/ui/ButtonSpinner';
 
 const ImageModal = ({
   showImage,
@@ -64,8 +65,8 @@ const ImageModal = ({
                 className="flex items-center px-4 py-2 bg-green-600 hover:bg-green-700 rounded-lg transition-colors"
               >
                 {verifyLoading[imageCertificate.id] ? (
-                  <div className="mr-2 h-5 w-5">
-                    <FuturisticSpinner size="sm" color="white" />
+                  <div className="mr-2">
+                    <ButtonSpinner color="green" size="md" />
                   </div>
                 ) : <FaCheck className="mr-2" />}
                 Verify Certificate
@@ -79,8 +80,8 @@ const ImageModal = ({
                 className="flex items-center px-4 py-2 bg-red-600 hover:bg-red-700 rounded-lg transition-colors"
               >
                 {revokeLoading[imageCertificate.id] ? (
-                  <div className="mr-2 h-5 w-5">
-                    <FuturisticSpinner size="sm" color="white" />
+                  <div className="mr-2">
+                    <ButtonSpinner color="red" size="md" />
                   </div>
                 ) : <FaBan className="mr-2" />}
                 Revoke Certificate

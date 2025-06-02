@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react';
 import { BrowserProvider } from 'ethers';
 import { CERTIFICATES_CACHE_KEY } from '../components/sperates/f1.js';
+import TransactionErrorModal from '../components/ui/TransactionErrorModal';
 
 export const useCertificateBurn = (
   contract,
@@ -12,6 +13,8 @@ export const useCertificateBurn = (
   const [burnReason, setBurnReason] = useState('');
   const [burnTimelock, setBurnTimelock] = useState(0);
   const [internalSelectedCertificate, setInternalSelectedCertificate] = useState(null);
+  const [error, setError] = useState(null);
+  const [showErrorModal, setShowErrorModal] = useState(false);
   
   // Get burn timelock from contract
   const getBurnTimelock = useCallback(async () => {
@@ -23,6 +26,12 @@ export const useCertificateBurn = (
       console.error("Error getting burn timelock:", error);
     }
   }, [contract]);
+  
+  // Close error modal
+  const closeErrorModal = useCallback(() => {
+    setShowErrorModal(false);
+    setError(null);
+  }, []);
   
   // Request to burn a certificate
   const requestBurnCertificate = useCallback(async () => {
@@ -71,6 +80,8 @@ export const useCertificateBurn = (
       
     } catch (error) {
       console.error("Error requesting certificate burn:", error);
+      setError(error);
+      setShowErrorModal(true);
     } finally {
       setBurnLoading(false);
     }
@@ -118,6 +129,8 @@ export const useCertificateBurn = (
       
     } catch (error) {
       console.error("Error requesting certificate burn:", error);
+      setError(error);
+      setShowErrorModal(true);
     } finally {
       setBurnLoading(false);
     }
@@ -154,6 +167,8 @@ export const useCertificateBurn = (
       
     } catch (error) {
       console.error("Error approving certificate burn:", error);
+      setError(error);
+      setShowErrorModal(true);
     } finally {
       setBurnLoading(false);
     }
@@ -196,6 +211,8 @@ export const useCertificateBurn = (
       
     } catch (error) {
       console.error("Error canceling certificate burn request:", error);
+      setError(error);
+      setShowErrorModal(true);
     } finally {
       setBurnLoading(false);
     }
@@ -238,6 +255,8 @@ export const useCertificateBurn = (
       
     } catch (error) {
       console.error("Error canceling certificate burn requests:", error);
+      setError(error);
+      setShowErrorModal(true);
     } finally {
       setBurnLoading(false);
     }
@@ -294,14 +313,9 @@ export const useCertificateBurn = (
     } catch (error) {
       console.error("Error burning certificate:", error);
       
-      // Check if the error is a user rejection
-      const isUserRejection = error.code === 4001 || 
-                            error.message?.includes('user rejected') || 
-                            error.message?.includes('user denied');
-      
-      if (isUserRejection) {
-        console.log('User rejected the burn transaction');
-      }
+      // Set error for modal display
+      setError(error);
+      setShowErrorModal(true);
       
       // Reset the burning state regardless of error type
       setCertificates(prev => 
@@ -349,6 +363,9 @@ export const useCertificateBurn = (
     cancelBurnMultipleRequests,
     burnCertificate,
     openBurnModal,
-    closeBurnModal
+    closeBurnModal,
+    error,
+    showErrorModal,
+    closeErrorModal
   };
 }; 

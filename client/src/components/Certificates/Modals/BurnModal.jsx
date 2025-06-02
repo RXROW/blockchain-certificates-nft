@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { FaTrash, FaSpinner, FaClock, FaCheck, FaHourglassHalf, FaFire, FaTimes } from 'react-icons/fa';
+import { FaTrash, FaSpinner, FaClock, FaCheck, FaHourglassHalf, FaFire, FaTimes, FaExclamationTriangle } from 'react-icons/fa';
 import { Link } from 'react-router-dom';
+import ButtonSpinner from '../../ui/ButtonSpinner';
 
 const BurnModal = ({
   showBurnModal,
@@ -21,6 +22,31 @@ const BurnModal = ({
   const [directBurnSuccess, setDirectBurnSuccess] = useState(false);
   const [animationStarted, setAnimationStarted] = useState(false);
   const [localBurnLoading, setLocalBurnLoading] = useState(false);
+  const [validationError, setValidationError] = useState('');
+  
+  // Define max characters for burn reason
+  const MAX_CHARS = 200;
+  
+  // Calculate remaining characters
+  const remainingChars = MAX_CHARS - (burnReason?.length || 0);
+  
+  // Determine color based on remaining characters
+  const getCounterColor = () => {
+    if (remainingChars <= 0) return 'text-red-500 font-bold';
+    if (remainingChars < 20) return 'text-yellow-400';
+    return 'text-gray-400';
+  };
+  
+  // Validate input whenever burn reason changes
+  useEffect(() => {
+    if (!burnReason || burnReason.trim() === '') {
+      setValidationError('Please provide a reason for burn');
+    } else if (burnReason.length > MAX_CHARS) {
+      setValidationError(`Reason exceeds maximum of ${MAX_CHARS} characters`);
+    } else {
+      setValidationError('');
+    }
+  }, [burnReason]);
   
   // Format the timelock in days, hours, minutes
   const formatTimelock = (seconds) => {
@@ -44,6 +70,17 @@ const BurnModal = ({
   
   // Wrap the burn request handler to set our state
   const handleBurnRequestWithState = async () => {
+    // Validate before submitting
+    if (!burnReason || burnReason.trim() === '') {
+      setValidationError('Please provide a reason for burn');
+      return;
+    }
+    
+    if (burnReason.length > MAX_CHARS) {
+      setValidationError(`Reason exceeds maximum of ${MAX_CHARS} characters`);
+      return;
+    }
+    
     try {
       setLocalBurnLoading(true);
       await handleBurnRequest();
@@ -57,6 +94,17 @@ const BurnModal = ({
   
   // Wrap the direct burn handler to set our state
   const handleDirectBurnWithState = async () => {
+    // Validate before submitting
+    if (!burnReason || burnReason.trim() === '') {
+      setValidationError('Please provide a reason for burn');
+      return;
+    }
+    
+    if (burnReason.length > MAX_CHARS) {
+      setValidationError(`Reason exceeds maximum of ${MAX_CHARS} characters`);
+      return;
+    }
+    
     try {
       setDirectBurnSuccess(false);
       setLocalBurnLoading(true);
@@ -105,6 +153,7 @@ const BurnModal = ({
         setDirectBurnSuccess(false);
         setAnimationStarted(false);
         setLocalBurnLoading(false);
+        setValidationError('');
       }, 300);
     }
   }, [showBurnModal]);
@@ -125,6 +174,7 @@ const BurnModal = ({
           <button
             onClick={closeBurnModal}
             className="text-gray-400 hover:text-gray-200"
+            disabled={isLoading}
           >
             ✕
           </button>
@@ -166,7 +216,9 @@ const BurnModal = ({
                       className="inline-flex items-center px-4 py-2 bg-gray-600 hover:bg-gray-700 rounded-lg transition-colors text-white text-sm"
                     >
                       {isLoading ? (
-                        <FaSpinner className="animate-spin mr-2" />
+                        <div className="mr-2">
+                          <ButtonSpinner color="red" size="sm" />
+                        </div>
                       ) : (
                         <FaTimes className="mr-2" />
                       )}
@@ -224,14 +276,32 @@ const BurnModal = ({
             </div>
             
             <div className="mb-5">
-              <label className="block text-gray-400 mb-2">Reason for burn {canUserDirectBurn ? "" : "request"}</label>
+              <div className="flex justify-between items-center mb-1">
+                <label className="block text-gray-400">Reason for burn {canUserDirectBurn ? "" : "request"}</label>
+                <span className={`text-xs ${getCounterColor()}`}>
+                  {remainingChars} characters remaining
+                </span>
+              </div>
               <textarea
-                className="w-full bg-gray-700 text-white rounded p-3 border border-gray-600 focus:border-violet-500 focus:outline-none"
+                className={`w-full bg-gray-700 text-white rounded p-3 border ${validationError ? 'border-red-500' : 'border-gray-600'} focus:border-violet-500 focus:outline-none`}
                 value={burnReason}
                 onChange={(e) => setBurnReason(e.target.value)}
                 rows={3}
                 placeholder="Please provide a reason for burning this certificate..."
+                maxLength={MAX_CHARS + 5} // Allow slight overflow for UX but show error
               />
+              
+              {validationError && (
+                <div className="mt-1 text-red-400 text-sm flex items-start">
+                  <FaExclamationTriangle className="mr-1 mt-0.5 flex-shrink-0" />
+                  <span>{validationError}</span>
+                </div>
+              )}
+              
+              <p className="mt-2 text-xs text-gray-500">
+                <span className="text-yellow-400">Note:</span> This reason will be permanently stored on the blockchain. 
+                Keep it concise to minimize transaction costs.
+              </p>
             </div>
             
             <div className="flex justify-end space-x-3">
@@ -243,13 +313,15 @@ const BurnModal = ({
                 Cancel
               </button>
               <button
-                className="px-4 py-2 bg-red-600 rounded hover:bg-red-500 flex items-center transition-colors"
+                className="px-4 py-2 bg-red-600 rounded hover:bg-red-500 flex items-center transition-colors disabled:opacity-50"
                 onClick={canUserDirectBurn ? handleDirectBurnWithState : handleBurnRequestWithState}
-                disabled={!burnReason.trim() || isLoading}
+                disabled={!!validationError || !burnReason.trim() || isLoading}
               >
                 {isLoading ? (
                   <>
-                    <FaSpinner className="animate-spin mr-2" />
+                    <div className="mr-2">
+                      <ButtonSpinner color="red" size="sm" />
+                    </div>
                     Processing...
                   </>
                 ) : (
